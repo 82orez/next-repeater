@@ -8,25 +8,28 @@ const Home = () => {
   const waveformRef = useRef<HTMLDivElement>(null);
   const [waveSurfer, setWaveSurfer] = useState<WaveSurfer | null>(null);
   const [loop, setLoop] = useState(true);
-  const [playbackRate, setPlaybackRate] = useState(1); // 기본 재생 속도는 1
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [regions, setRegions] = useState<RegionsPlugin | null>(null);
 
   useEffect(() => {
     if (!waveformRef.current) return;
 
-    const regions = RegionsPlugin.create();
+    const regionsPlugin = RegionsPlugin.create();
     const ws = WaveSurfer.create({
       container: waveformRef.current,
       waveColor: "rgb(200, 0, 200)",
       progressColor: "rgb(100, 0, 100)",
-      plugins: [regions],
-      minPxPerSec: 10, // 줌 기능을 위해 기본값 설정
+      plugins: [regionsPlugin],
+      minPxPerSec: 10,
     });
+
+    setRegions(regionsPlugin);
 
     const random = (min: number, max: number) => Math.random() * (max - min) + min;
     const randomColor = () => `rgba(${random(0, 255)}, ${random(0, 255)}, ${random(0, 255)}, 0.5)`;
 
     ws.on("decode", () => {
-      regions.addRegion({
+      regionsPlugin.addRegion({
         start: 0,
         end: 8,
         content: "Resize me",
@@ -34,37 +37,21 @@ const Home = () => {
         drag: false,
         resize: true,
       });
-      regions.addRegion({
-        start: 9,
-        end: 10,
-        content: "Cramped region",
-        color: randomColor(),
-        minLength: 1,
-        maxLength: 10,
-      });
-      regions.addRegion({
-        start: 12,
-        end: 17,
-        content: "Drag me",
-        color: randomColor(),
-        resize: false,
-      });
-      regions.addRegion({ start: 19, content: "Marker", color: randomColor() });
-      regions.addRegion({ start: 20, content: "Second marker", color: randomColor() });
+      // ... (다른 region 추가 코드)
     });
 
-    regions.enableDragSelection({ color: "rgba(255, 0, 0, 0.1)" });
+    regionsPlugin.enableDragSelection({ color: "rgba(255, 0, 0, 0.1)" });
 
-    regions.on("region-updated", (region) => {
+    regionsPlugin.on("region-updated", (region) => {
       console.log("Updated region", region);
     });
 
     let activeRegion: any = null;
-    regions.on("region-in", (region) => {
+    regionsPlugin.on("region-in", (region) => {
       activeRegion = region;
     });
 
-    regions.on("region-out", (region) => {
+    regionsPlugin.on("region-out", (region) => {
       if (activeRegion === region && loop) {
         region.play();
       } else {
@@ -72,7 +59,29 @@ const Home = () => {
       }
     });
 
-    regions.on("region-clicked", (region, e) => {
+    regionsPlugin.on("region-created", (region) => {
+      const deleteButton = document.createElement("button");
+      deleteButton.textContent = "X";
+      deleteButton.className = "delete-region";
+      deleteButton.style.position = "absolute";
+      deleteButton.style.right = "2px";
+      deleteButton.style.top = "2px";
+      deleteButton.style.padding = "2px 5px";
+      deleteButton.style.background = "red";
+      deleteButton.style.color = "white";
+      deleteButton.style.border = "none";
+      deleteButton.style.borderRadius = "3px";
+      deleteButton.style.cursor = "pointer";
+
+      deleteButton.addEventListener("click", (e) => {
+        e.stopPropagation();
+        region.remove();
+      });
+
+      region.element.appendChild(deleteButton);
+    });
+
+    regionsPlugin.on("region-clicked", (region, e) => {
       e.stopPropagation();
       activeRegion = region;
       region.play();
@@ -135,6 +144,9 @@ const Home = () => {
         </button>
         <button onClick={handleStop} className="rounded bg-red-500 px-4 py-2 text-white">
           Stop
+        </button>
+        <button onClick={() => regions?.clearRegions()} className="rounded bg-yellow-500 px-4 py-2 text-white">
+          Clear All Regions
         </button>
       </div>
 
