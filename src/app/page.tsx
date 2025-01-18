@@ -102,6 +102,18 @@ const Home = () => {
     }
   };
 
+  const handlePlay = () => {
+    if (waveSurfer) {
+      waveSurfer.play();
+    }
+  };
+
+  const handleStop = () => {
+    if (waveSurfer) {
+      waveSurfer.stop();
+    }
+  };
+
   return (
     <div className="p-4">
       <div>
@@ -111,6 +123,15 @@ const Home = () => {
       <div id="waveform" ref={waveformRef} className="mb-4"></div>
 
       <div className="flex items-center gap-4">
+        <button onClick={handlePlay} className="rounded bg-blue-500 px-4 py-2 text-white">
+          Play
+        </button>
+        <button onClick={handleStop} className="rounded bg-red-500 px-4 py-2 text-white">
+          Stop
+        </button>
+      </div>
+
+      <div className="mt-4 flex items-center gap-4">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />
           Loop regions
