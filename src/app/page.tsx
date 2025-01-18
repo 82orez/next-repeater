@@ -8,6 +8,7 @@ const Home = () => {
   const waveformRef = useRef<HTMLDivElement>(null);
   const [waveSurfer, setWaveSurfer] = useState<WaveSurfer | null>(null);
   const [loop, setLoop] = useState(true);
+  const [playbackRate, setPlaybackRate] = useState(1); // 기본 재생 속도는 1
 
   useEffect(() => {
     if (!waveformRef.current) return;
@@ -94,6 +95,12 @@ const Home = () => {
     return () => ws.destroy();
   }, [loop]);
 
+  useEffect(() => {
+    if (waveSurfer) {
+      waveSurfer.setPlaybackRate(playbackRate); // 재생 속도 업데이트
+    }
+  }, [playbackRate, waveSurfer]);
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0] && waveSurfer) {
       const file = event.target.files[0];
@@ -140,6 +147,12 @@ const Home = () => {
         <label className="flex items-center gap-2">
           Zoom:
           <input type="range" id="zoom-slider" min="10" max="1000" defaultValue="10" />
+        </label>
+
+        <label className="flex items-center gap-2">
+          Playback Speed:
+          <input type="range" min="0.5" max="2" step="0.1" value={playbackRate} onChange={(e) => setPlaybackRate(parseFloat(e.target.value))} />
+          <span>{playbackRate}x</span>
         </label>
       </div>
 
