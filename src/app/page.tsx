@@ -17,9 +17,8 @@ const Home = () => {
       container: waveformRef.current,
       waveColor: "rgb(200, 0, 200)",
       progressColor: "rgb(100, 0, 100)",
-      url: "/audio/audio.wav",
-      // url: "/recording.mp3",
       plugins: [regions],
+      minPxPerSec: 10, // 줌 기능을 위해 기본값 설정
     });
 
     const random = (min: number, max: number) => Math.random() * (max - min) + min;
@@ -95,8 +94,20 @@ const Home = () => {
     return () => ws.destroy();
   }, [loop]);
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0] && waveSurfer) {
+      const file = event.target.files[0];
+      const objectURL = URL.createObjectURL(file);
+      waveSurfer.load(objectURL);
+    }
+  };
+
   return (
     <div className="p-4">
+      <div>
+        <input type="file" accept="audio/*" onChange={handleFileChange} />
+      </div>
+
       <div id="waveform" ref={waveformRef} className="mb-4"></div>
 
       <div className="flex items-center gap-4">
