@@ -10,6 +10,7 @@ const Home = () => {
   const [loop, setLoop] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [regions, setRegions] = useState<RegionsPlugin | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false); // 재생 상태 관리
 
   useEffect(() => {
     if (!waveformRef.current) return;
@@ -29,14 +30,14 @@ const Home = () => {
     const randomColor = () => `rgba(${random(0, 255)}, ${random(0, 255)}, ${random(0, 255)}, 0.5)`;
 
     ws.on("decode", () => {
-      regionsPlugin.addRegion({
-        start: 0,
-        end: 8,
-        content: "Resize me",
-        color: randomColor(),
-        drag: false,
-        resize: true,
-      });
+      // regionsPlugin.addRegion({
+      //   start: 0,
+      //   end: 8,
+      //   content: "Resize me",
+      //   color: randomColor(),
+      //   drag: false,
+      //   resize: true,
+      // });
       // ... (다른 region 추가 코드)
     });
 
@@ -45,6 +46,9 @@ const Home = () => {
     regionsPlugin.on("region-updated", (region) => {
       console.log("Updated region", region);
     });
+
+    ws.on("play", () => setIsPlaying(true)); // 재생 시작 시 상태 업데이트
+    ws.on("pause", () => setIsPlaying(false)); // 일시정지 시 상태 업데이트
 
     let activeRegion: any = null;
     regionsPlugin.on("region-in", (region) => {
@@ -115,18 +119,29 @@ const Home = () => {
       const file = event.target.files[0];
       const objectURL = URL.createObjectURL(file);
       waveSurfer.load(objectURL);
+      setIsPlaying(false); // 파일 변경 시 재생 상태 초기화
     }
   };
 
-  const handlePlay = () => {
-    if (waveSurfer) {
-      waveSurfer.play();
-    }
-  };
+  // const handlePlay = () => {
+  //   if (waveSurfer) {
+  //     waveSurfer.play();
+  //   }
+  // };
+  //
+  // const handleStop = () => {
+  //   if (waveSurfer) {
+  //     waveSurfer.playPause();
+  //   }
+  // };
 
-  const handleStop = () => {
+  const togglePlayPause = () => {
     if (waveSurfer) {
-      waveSurfer.stop();
+      if (waveSurfer.isPlaying()) {
+        waveSurfer.pause(); // 재생 중이면 일시정지
+      } else {
+        waveSurfer.play(); // 정지 상태면 재생
+      }
     }
   };
 
@@ -139,11 +154,8 @@ const Home = () => {
       <div id="waveform" ref={waveformRef} className="mb-4"></div>
 
       <div className="flex items-center gap-4">
-        <button onClick={handlePlay} className="rounded bg-blue-500 px-4 py-2 text-white">
-          Play
-        </button>
-        <button onClick={handleStop} className="rounded bg-red-500 px-4 py-2 text-white">
-          Stop
+        <button onClick={togglePlayPause} className="w-20 rounded bg-blue-500 px-4 py-2 text-white">
+          {isPlaying ? "Pause" : "Play"}
         </button>
         <button onClick={() => regions?.clearRegions()} className="rounded bg-yellow-500 px-4 py-2 text-white">
           Clear All Regions
