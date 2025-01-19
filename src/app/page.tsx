@@ -7,7 +7,6 @@ import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.esm.js";
 const Home = () => {
   const waveformRef = useRef<HTMLDivElement>(null);
   const [waveSurfer, setWaveSurfer] = useState<WaveSurfer | null>(null);
-  const [loop, setLoop] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [regions, setRegions] = useState<RegionsPlugin | null>(null);
   const [isPlaying, setIsPlaying] = useState(false); // 재생 상태 관리
@@ -58,7 +57,7 @@ const Home = () => {
     });
 
     regionsPlugin.on("region-out", (region) => {
-      if (activeRegion === region && loop) {
+      if (activeRegion === region) {
         region.play();
       } else {
         activeRegion = null;
@@ -108,7 +107,7 @@ const Home = () => {
     setWaveSurfer(ws);
 
     return () => ws.destroy();
-  }, [loop]);
+  }, []);
 
   useEffect(() => {
     if (waveSurfer) {
@@ -174,11 +173,6 @@ const Home = () => {
       </div>
 
       <div className="mt-4 flex items-center gap-4">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />
-          Loop regions
-        </label>
-
         <label className="flex items-center gap-2">
           Zoom:
           <input type="range" id="zoom-slider" min="10" max="1000" defaultValue="10" />
