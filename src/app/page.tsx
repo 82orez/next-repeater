@@ -11,6 +11,8 @@ const Home = () => {
   const [regions, setRegions] = useState<RegionsPlugin | null>(null);
   const [isPlaying, setIsPlaying] = useState(false); // 재생 상태 관리
   const [volume, setVolume] = useState(0.5); // 음량 상태 관리 (기본값 50%)
+  const [currentTime, setCurrentTime] = useState(0); // 현재 시간
+  const [duration, setDuration] = useState(0); // 전체 시간
 
   useEffect(() => {
     if (!waveformRef.current) return;
@@ -29,6 +31,14 @@ const Home = () => {
 
     const random = (min: number, max: number) => Math.random() * (max - min) + min;
     const randomColor = () => `rgba(${random(0, 255)}, ${random(0, 255)}, ${random(0, 255)}, 0.5)`;
+
+    ws.on("ready", () => {
+      setDuration(ws.getDuration()); // 전체 재생 시간 설정
+    });
+
+    ws.on("audioprocess", () => {
+      setCurrentTime(ws.getCurrentTime()); // 현재 재생 시간 업데이트
+    });
 
     ws.on("decode", () => {
       // regionsPlugin.addRegion({
@@ -155,13 +165,25 @@ const Home = () => {
     }
   };
 
+  // 시간 포맷 변환 함수
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = (time % 60).toFixed(1); // 소숫점 첫째 자리까지 표시
+    return `${minutes}:${seconds.padStart(4, "0")}`; // "분:초.소숫점" 형식
+  };
+
   return (
     <div className="p-4">
       <div>
         <input type="file" accept="audio/*" onChange={handleFileChange} />
       </div>
 
-      <div id="waveform" ref={waveformRef} className="my-4 rounded-md border-2"></div>
+      <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-2"></div>
+      {/* 시간 표시 */}
+      <div className="mb-4 flex justify-between text-gray-700">
+        <span>{formatTime(currentTime)}</span>
+        <span>{formatTime(duration)}</span>
+      </div>
 
       <div className="flex items-center gap-4">
         <button onClick={togglePlayPause} className="w-20 rounded bg-blue-500 px-4 py-2 text-white">
