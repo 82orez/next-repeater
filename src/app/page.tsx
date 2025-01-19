@@ -124,6 +124,9 @@ const Home = () => {
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0] && waveSurfer) {
+      // 기존 구간 삭제
+      regions?.clearRegions();
+
       const file = event.target.files[0];
       const objectURL = URL.createObjectURL(file);
       waveSurfer.load(objectURL);
@@ -159,7 +162,7 @@ const Home = () => {
         <input type="file" accept="audio/*" onChange={handleFileChange} />
       </div>
 
-      <div id="waveform" ref={waveformRef} className="mb-4"></div>
+      <div id="waveform" ref={waveformRef} className="my-4 rounded-md border-2"></div>
 
       <div className="flex items-center gap-4">
         <button onClick={togglePlayPause} className="w-20 rounded bg-blue-500 px-4 py-2 text-white">
