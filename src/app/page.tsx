@@ -11,6 +11,7 @@ const Home = () => {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [regions, setRegions] = useState<RegionsPlugin | null>(null);
   const [isPlaying, setIsPlaying] = useState(false); // 재생 상태 관리
+  const [volume, setVolume] = useState(0.5); // 음량 상태 관리 (기본값 50%)
 
   useEffect(() => {
     if (!waveformRef.current) return;
@@ -22,6 +23,7 @@ const Home = () => {
       progressColor: "rgb(100, 0, 100)",
       plugins: [regionsPlugin],
       minPxPerSec: 10,
+      // volume: volume, // 초기 볼륨 설정
     });
 
     setRegions(regionsPlugin);
@@ -114,6 +116,12 @@ const Home = () => {
     }
   }, [playbackRate, waveSurfer]);
 
+  useEffect(() => {
+    if (waveSurfer) {
+      waveSurfer.setVolume(volume); // 음량 업데이트
+    }
+  }, [volume, waveSurfer]);
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0] && waveSurfer) {
       const file = event.target.files[0];
@@ -177,6 +185,12 @@ const Home = () => {
           Playback Speed:
           <input type="range" min="0.5" max="2" step="0.1" value={playbackRate} onChange={(e) => setPlaybackRate(parseFloat(e.target.value))} />
           <span>{playbackRate}x</span>
+        </label>
+
+        <label className="flex items-center gap-2">
+          Volume:
+          <input type="range" min="0" max="1" step="0.01" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} />
+          <span>{Math.round(volume * 100)}%</span>
         </label>
       </div>
 
