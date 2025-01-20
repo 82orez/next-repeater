@@ -133,6 +133,21 @@ const Home = () => {
     }
   }, [volume, waveSurfer]);
 
+  // Space bar 단축키 이벤트 핸들링
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === "Space") {
+        event.preventDefault(); // 기본 스크롤 동작 방지
+        togglePlayPause();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [waveSurfer]);
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0] && waveSurfer) {
       // 기존 구간 삭제
@@ -175,24 +190,20 @@ const Home = () => {
   };
 
   return (
-    <div className="p-4">
-      <div>
-        <input type="file" accept="audio/*, video/*" onChange={handleFileChange} />
-      </div>
+    <div className="flex h-screen flex-col items-center p-4">
+      <div className={"w-full"}>
+        <div>
+          <input type="file" accept="audio/*, video/*" onChange={handleFileChange} />
+        </div>
 
-      <video
-        ref={videoRef}
-        src="/video/Hustle-101.mp4"
-        controls
-        playsInline
-        style={{ width: "100%", maxWidth: "720px", margin: "0 auto", display: "block" }}
-      />
+        <video ref={videoRef} controls playsInline className={"mx-auto w-full max-w-3xl"} />
 
-      <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-2"></div>
-      {/* 시간 표시 */}
-      <div className="mb-4 flex justify-between text-gray-700">
-        <span>{formatTime(currentTime)}</span>
-        <span>{formatTime(duration)}</span>
+        <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-4 border-gray-300 bg-gray-100"></div>
+        {/* 시간 표시 */}
+        <div className="mb-4 flex justify-between text-gray-700">
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration)}</span>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -204,14 +215,14 @@ const Home = () => {
         </button>
       </div>
 
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-10 flex w-full items-center justify-around gap-4">
         <label className="flex items-center gap-2">
-          Zoom:
+          Zoom in-out:
           <input type="range" id="zoom-slider" min="10" max="1000" defaultValue="10" />
         </label>
 
         <label className="flex items-center gap-2">
-          Playback Speed:
+          Play-Speed:
           <input type="range" min="0.5" max="2" step="0.1" value={playbackRate} onChange={(e) => setPlaybackRate(parseFloat(e.target.value))} />
           <span>{playbackRate}x</span>
         </label>
