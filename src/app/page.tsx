@@ -6,6 +6,7 @@ import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.esm.js";
 
 const Home = () => {
   const waveformRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef(null);
   const [waveSurfer, setWaveSurfer] = useState<WaveSurfer | null>(null);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [regions, setRegions] = useState<RegionsPlugin | null>(null);
@@ -15,108 +16,109 @@ const Home = () => {
   const [duration, setDuration] = useState(0); // 전체 시간
 
   useEffect(() => {
-    if (!waveformRef.current) return;
-
-    const regionsPlugin = RegionsPlugin.create();
-    const ws = WaveSurfer.create({
-      container: waveformRef.current,
-      waveColor: "rgb(200, 0, 200)",
-      progressColor: "rgb(100, 0, 100)",
-      plugins: [regionsPlugin],
-      minPxPerSec: 10,
-      // volume: volume, // 초기 볼륨 설정
-    });
-
-    setRegions(regionsPlugin);
-
-    const random = (min: number, max: number) => Math.random() * (max - min) + min;
-    const randomColor = () => `rgba(${random(0, 255)}, ${random(0, 255)}, ${random(0, 255)}, 0.5)`;
-
-    ws.on("ready", () => {
-      setDuration(ws.getDuration()); // 전체 재생 시간 설정
-    });
-
-    ws.on("audioprocess", () => {
-      setCurrentTime(ws.getCurrentTime()); // 현재 재생 시간 업데이트
-    });
-
-    ws.on("decode", () => {
-      // regionsPlugin.addRegion({
-      //   start: 0,
-      //   end: 8,
-      //   content: "Resize me",
-      //   color: randomColor(),
-      //   drag: false,
-      //   resize: true,
-      // });
-      // ... (다른 region 추가 코드)
-    });
-
-    regionsPlugin.enableDragSelection({ color: "rgba(255, 0, 0, 0.1)" });
-
-    regionsPlugin.on("region-updated", (region) => {
-      console.log("Updated region", region);
-    });
-
-    ws.on("play", () => setIsPlaying(true)); // 재생 시작 시 상태 업데이트
-    ws.on("pause", () => setIsPlaying(false)); // 일시정지 시 상태 업데이트
-
-    let activeRegion: any = null;
-    regionsPlugin.on("region-in", (region) => {
-      activeRegion = region;
-    });
-
-    regionsPlugin.on("region-out", (region) => {
-      if (activeRegion === region) {
-        region.play();
-      } else {
-        activeRegion = null;
-      }
-    });
-
-    regionsPlugin.on("region-created", (region) => {
-      const deleteButton = document.createElement("button");
-      deleteButton.textContent = "X";
-      deleteButton.className = "delete-region";
-      deleteButton.style.position = "absolute";
-      deleteButton.style.right = "2px";
-      deleteButton.style.top = "2px";
-      deleteButton.style.padding = "2px 5px";
-      deleteButton.style.background = "red";
-      deleteButton.style.color = "white";
-      deleteButton.style.border = "none";
-      deleteButton.style.borderRadius = "3px";
-      deleteButton.style.cursor = "pointer";
-
-      deleteButton.addEventListener("click", (e) => {
-        e.stopPropagation();
-        region.remove();
+    if (typeof window !== "undefined" && videoRef.current && waveformRef.current) {
+      const regionsPlugin = RegionsPlugin.create();
+      const ws = WaveSurfer.create({
+        container: waveformRef.current,
+        waveColor: "rgb(200, 0, 200)",
+        progressColor: "rgb(100, 0, 100)",
+        plugins: [regionsPlugin],
+        minPxPerSec: 10,
+        media: videoRef.current,
+        // volume: volume, // 초기 볼륨 설정
       });
 
-      region.element.appendChild(deleteButton);
-    });
+      setRegions(regionsPlugin);
 
-    regionsPlugin.on("region-clicked", (region, e) => {
-      e.stopPropagation();
-      activeRegion = region;
-      region.play();
-      region.setOptions({ color: randomColor() });
-    });
+      const random = (min: number, max: number) => Math.random() * (max - min) + min;
+      const randomColor = () => `rgba(${random(0, 255)}, ${random(0, 255)}, ${random(0, 255)}, 0.5)`;
 
-    ws.on("interaction", () => {
-      activeRegion = null;
-    });
+      ws.on("ready", () => {
+        setDuration(ws.getDuration()); // 전체 재생 시간 설정
+      });
 
-    ws.once("decode", () => {
-      const slider = document.getElementById("zoom-slider") as HTMLInputElement;
-      slider.oninput = (e) => {
-        ws.zoom(Number((e.target as HTMLInputElement).value));
-      };
-    });
+      ws.on("audioprocess", () => {
+        setCurrentTime(ws.getCurrentTime()); // 현재 재생 시간 업데이트
+      });
 
-    setWaveSurfer(ws);
+      ws.on("decode", () => {
+        // regionsPlugin.addRegion({
+        //   start: 0,
+        //   end: 8,
+        //   content: "Resize me",
+        //   color: randomColor(),
+        //   drag: false,
+        //   resize: true,
+        // });
+        // ... (다른 region 추가 코드)
+      });
 
-    return () => ws.destroy();
+      regionsPlugin.enableDragSelection({ color: "rgba(255, 0, 0, 0.1)" });
+
+      regionsPlugin.on("region-updated", (region) => {
+        console.log("Updated region", region);
+      });
+
+      ws.on("play", () => setIsPlaying(true)); // 재생 시작 시 상태 업데이트
+      ws.on("pause", () => setIsPlaying(false)); // 일시정지 시 상태 업데이트
+
+      let activeRegion: any = null;
+      regionsPlugin.on("region-in", (region) => {
+        activeRegion = region;
+      });
+
+      regionsPlugin.on("region-out", (region) => {
+        if (activeRegion === region) {
+          region.play();
+        } else {
+          activeRegion = null;
+        }
+      });
+
+      regionsPlugin.on("region-created", (region) => {
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "X";
+        deleteButton.className = "delete-region";
+        deleteButton.style.position = "absolute";
+        deleteButton.style.right = "2px";
+        deleteButton.style.top = "2px";
+        deleteButton.style.padding = "2px 5px";
+        deleteButton.style.background = "red";
+        deleteButton.style.color = "white";
+        deleteButton.style.border = "none";
+        deleteButton.style.borderRadius = "3px";
+        deleteButton.style.cursor = "pointer";
+
+        deleteButton.addEventListener("click", (e) => {
+          e.stopPropagation();
+          region.remove();
+        });
+
+        region.element.appendChild(deleteButton);
+      });
+
+      regionsPlugin.on("region-clicked", (region, e) => {
+        e.stopPropagation();
+        activeRegion = region;
+        region.play();
+        region.setOptions({ color: randomColor() });
+      });
+
+      ws.on("interaction", () => {
+        activeRegion = null;
+      });
+
+      ws.once("decode", () => {
+        const slider = document.getElementById("zoom-slider") as HTMLInputElement;
+        slider.oninput = (e) => {
+          ws.zoom(Number((e.target as HTMLInputElement).value));
+        };
+      });
+
+      setWaveSurfer(ws);
+
+      return () => ws.destroy();
+    }
   }, []);
 
   useEffect(() => {
@@ -175,8 +177,16 @@ const Home = () => {
   return (
     <div className="p-4">
       <div>
-        <input type="file" accept="audio/*" onChange={handleFileChange} />
+        <input type="file" accept="audio/*, video/*" onChange={handleFileChange} />
       </div>
+
+      <video
+        ref={videoRef}
+        src="/video/Hustle-101.mp4"
+        controls
+        playsInline
+        style={{ width: "100%", maxWidth: "720px", margin: "0 auto", display: "block" }}
+      />
 
       <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-2"></div>
       {/* 시간 표시 */}
