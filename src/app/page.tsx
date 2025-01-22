@@ -205,38 +205,49 @@ const Home = () => {
 
   return (
     <div className="flex h-screen flex-col items-center p-4">
+      <p className={"w-full text-center text-xl font-bold"}>재생할 파일을 선택해 주세요.</p>
       <div className={"w-full"}>
         <div>
           <input type="file" accept="audio/*, video/*" onChange={handleFileChange} />
         </div>
 
-        <video ref={videoRef} controls playsInline className={"mx-auto mb-4 w-full max-w-3xl"} />
+        <video
+          ref={videoRef}
+          // controls
+          playsInline
+          className={clsx("mx-auto mb-4 w-full max-w-3xl", {
+            hidden: fileType === null || fileType === "audio",
+            "pointer-events-none": fileType === "video",
+          })}
+        />
 
-        <div
-          className="relative mx-auto h-4 w-full max-w-3xl cursor-pointer rounded bg-gray-300"
-          onClick={(e) => {
-            if (waveSurfer && duration) {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const clickX = e.clientX - rect.left;
-              const newTime = (clickX / rect.width) * duration;
-              waveSurfer.setTime(newTime);
-              setCurrentTime(newTime);
-            }
-          }}>
-          <div
-            className="absolute left-0 top-0 h-full rounded"
-            style={{
-              width: `${(currentTime / duration) * 100}%`,
-              backgroundColor: isPlaying ? "#3b82f6" : "#94a3b8",
-            }}></div>
-        </div>
-
+        {/* 파형 표시 */}
         <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-4 border-gray-300 bg-gray-100"></div>
         {/* 시간 표시 */}
-        <div className="mb-4 flex justify-between text-gray-700">
+        <div className="flex justify-between text-gray-700">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>
+      </div>
+
+      {/* progress bar */}
+      <div
+        className="relative mx-auto mb-8 h-4 w-full max-w-3xl cursor-pointer rounded bg-gray-300"
+        onClick={(e) => {
+          if (waveSurfer && duration) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const newTime = (clickX / rect.width) * duration;
+            waveSurfer.setTime(newTime);
+            setCurrentTime(newTime);
+          }
+        }}>
+        <div
+          className="absolute left-0 top-0 h-full rounded"
+          style={{
+            width: `${(currentTime / duration) * 100}%`,
+            backgroundColor: isPlaying ? "#3b82f6" : "#94a3b8",
+          }}></div>
       </div>
 
       <div className="flex items-center gap-4">
