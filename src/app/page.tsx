@@ -212,20 +212,23 @@ const Home = () => {
 
         <video ref={videoRef} controls playsInline className={"mx-auto mb-4 w-full max-w-3xl"} />
 
-        {/* Progress Bar */}
         <div
           className="relative mx-auto h-4 w-full max-w-3xl cursor-pointer rounded bg-gray-300"
           onClick={(e) => {
             if (waveSurfer && duration) {
               const rect = e.currentTarget.getBoundingClientRect();
-              const clickX = e.clientX - rect.left; // 클릭 위치
-              const percentage = clickX / rect.width; // 클릭 위치 비율
-              const newTime = percentage * duration; // 비례 시간 계산
-              waveSurfer.setTime(newTime); // 오디오/비디오 위치 이동
+              const clickX = e.clientX - rect.left;
+              const newTime = (clickX / rect.width) * duration;
+              waveSurfer.setTime(newTime);
+              setCurrentTime(newTime);
             }
           }}>
-          {/* Progress Indicator */}
-          <div className="absolute left-0 top-0 h-full rounded bg-blue-500" style={{ width: `${(currentTime / duration) * 100}%` }}></div>
+          <div
+            className="absolute left-0 top-0 h-full rounded"
+            style={{
+              width: `${(currentTime / duration) * 100}%`,
+              backgroundColor: isPlaying ? "#3b82f6" : "#94a3b8",
+            }}></div>
         </div>
 
         <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-4 border-gray-300 bg-gray-100"></div>
