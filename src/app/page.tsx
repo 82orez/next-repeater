@@ -136,19 +136,23 @@ const Home = () => {
     }
   }, [volume, waveSurfer]);
 
-  // Space bar 단축키 이벤트 핸들링
+  // 단축키 이벤트 핸들링
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === "Space") {
-        event.preventDefault(); // 기본 스크롤 동작 방지
+        event.preventDefault();
         togglePlayPause();
+      } else if (event.code === "ArrowLeft") {
+        event.preventDefault();
+        skipTime(-5);
+      } else if (event.code === "ArrowRight") {
+        event.preventDefault();
+        skipTime(5);
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [waveSurfer]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,8 +204,8 @@ const Home = () => {
   const skipTime = (seconds: number) => {
     if (waveSurfer) {
       let newTime = waveSurfer.getCurrentTime() + seconds;
-      if (newTime < 0) newTime = 0;
-      if (newTime > duration) newTime = duration;
+      if (newTime < 0) newTime = 0; // 시작 지점보다 작으면 0으로 설정
+      if (newTime > waveSurfer.getDuration()) newTime = waveSurfer.getDuration(); // 전체 길이 초과 방지
       waveSurfer.setTime(newTime);
       setCurrentTime(newTime);
     }
