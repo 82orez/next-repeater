@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.esm.js";
+import clsx from "clsx";
 
 const Home = () => {
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -14,6 +15,7 @@ const Home = () => {
   const [volume, setVolume] = useState(0.5); // 음량 상태 관리 (기본값 50%)
   const [currentTime, setCurrentTime] = useState(0); // 현재 시간
   const [duration, setDuration] = useState(0); // 전체 시간
+  const [fileType, setFileType] = useState<"audio" | "video" | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && videoRef.current && waveformRef.current) {
@@ -155,6 +157,18 @@ const Home = () => {
 
       const file = event.target.files[0];
       const objectURL = URL.createObjectURL(file);
+
+      // 파일 타입 확인
+      if (file.type.startsWith("audio")) {
+        setFileType("audio");
+      } else if (file.type.startsWith("video")) {
+        setFileType("video");
+      } else {
+        setFileType(null);
+        alert("오디오 또는 비디오 파일을 선택해주세요.");
+        return;
+      }
+
       waveSurfer.load(objectURL);
       setIsPlaying(false); // 파일 변경 시 재생 상태 초기화
     }
@@ -196,7 +210,23 @@ const Home = () => {
           <input type="file" accept="audio/*, video/*" onChange={handleFileChange} />
         </div>
 
-        <video ref={videoRef} controls playsInline className={"mx-auto w-full max-w-3xl"} />
+        <video ref={videoRef} controls playsInline className={"mx-auto mb-4 w-full max-w-3xl"} />
+
+        {/* Progress Bar */}
+        <div
+          className="relative mx-auto h-4 w-full max-w-3xl cursor-pointer rounded bg-gray-300"
+          onClick={(e) => {
+            if (waveSurfer && duration) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left; // 클릭 위치
+              const percentage = clickX / rect.width; // 클릭 위치 비율
+              const newTime = percentage * duration; // 비례 시간 계산
+              waveSurfer.setTime(newTime); // 오디오/비디오 위치 이동
+            }
+          }}>
+          {/* Progress Indicator */}
+          <div className="absolute left-0 top-0 h-full rounded bg-blue-500" style={{ width: `${(currentTime / duration) * 100}%` }}></div>
+        </div>
 
         <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-4 border-gray-300 bg-gray-100"></div>
         {/* 시간 표시 */}
