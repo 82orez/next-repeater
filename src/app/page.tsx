@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.esm.js";
 import clsx from "clsx";
+import { FaBackward, FaForward } from "react-icons/fa6";
 
 const Home = () => {
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -262,13 +263,13 @@ const Home = () => {
 
       <div className="flex items-center gap-4">
         <button onClick={() => skipTime(-5)} className="rounded bg-gray-500 px-4 py-2 text-white">
-          뒤로가기
+          <FaBackward />
         </button>
         <button onClick={togglePlayPause} className="w-20 rounded bg-blue-500 px-4 py-2 text-white">
           {isPlaying ? "Pause" : "Play"}
         </button>
         <button onClick={() => skipTime(5)} className="rounded bg-gray-500 px-4 py-2 text-white">
-          앞으로 가기
+          <FaForward />
         </button>
 
         <button onClick={() => regions?.clearRegions()} className="rounded bg-yellow-500 px-4 py-2 text-white">
