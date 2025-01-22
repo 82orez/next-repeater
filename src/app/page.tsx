@@ -196,6 +196,16 @@ const Home = () => {
     }
   };
 
+  const skipTime = (seconds: number) => {
+    if (waveSurfer) {
+      let newTime = waveSurfer.getCurrentTime() + seconds;
+      if (newTime < 0) newTime = 0;
+      if (newTime > duration) newTime = duration;
+      waveSurfer.setTime(newTime);
+      setCurrentTime(newTime);
+    }
+  };
+
   // 시간 포맷 변환 함수
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -251,9 +261,16 @@ const Home = () => {
       </div>
 
       <div className="flex items-center gap-4">
+        <button onClick={() => skipTime(-5)} className="rounded bg-gray-500 px-4 py-2 text-white">
+          뒤로가기
+        </button>
         <button onClick={togglePlayPause} className="w-20 rounded bg-blue-500 px-4 py-2 text-white">
           {isPlaying ? "Pause" : "Play"}
         </button>
+        <button onClick={() => skipTime(5)} className="rounded bg-gray-500 px-4 py-2 text-white">
+          앞으로 가기
+        </button>
+
         <button onClick={() => regions?.clearRegions()} className="rounded bg-yellow-500 px-4 py-2 text-white">
           Clear All Regions
         </button>
