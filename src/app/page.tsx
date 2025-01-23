@@ -220,93 +220,98 @@ const Home = () => {
   };
 
   return (
-    <div className="flex h-screen flex-col items-center p-4">
+    <div>
       <p className={"w-full text-center text-xl font-bold"}>재생할 파일을 선택해 주세요.</p>
-      <div className={"w-full"}>
-        <div>
-          <input type="file" accept="audio/*, video/*" onChange={handleFileChange} />
-        </div>
-
-        <video
-          ref={videoRef}
-          // controls
-          playsInline
-          className={clsx("mx-auto mb-4 w-full max-w-3xl", {
-            hidden: fileType === null || fileType === "audio",
-            // "pointer-events-none": fileType === "video",
-          })}
-          onClick={togglePlayPause}
-        />
-
-        {/* 파형 표시 */}
-        <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-4 border-gray-300 bg-gray-100"></div>
-        {/* 시간 표시 */}
-        <div className="flex justify-between text-gray-700">
-          <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(duration)}</span>
-        </div>
+      <div>
+        <input type="file" accept="audio/*, video/*" onChange={handleFileChange} />
       </div>
 
-      {/* progress bar */}
-      <div
-        className="relative mx-auto mb-8 h-4 w-full max-w-3xl cursor-pointer rounded bg-gray-300"
-        onClick={(e) => {
-          if (waveSurfer && duration) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const clickX = e.clientX - rect.left;
-            const newTime = (clickX / rect.width) * duration;
-            waveSurfer.setTime(newTime);
-            setCurrentTime(newTime);
-          }
-        }}>
+      <div className={clsx("flex h-screen flex-col items-center p-4", { hidden: fileType === null })}>
+        <div className={"w-full"}>
+          <video
+            ref={videoRef}
+            // controls
+            playsInline
+            className={clsx("mx-auto mb-4 w-full max-w-3xl", {
+              hidden: fileType === null || fileType === "audio",
+              // "pointer-events-none": fileType === "video",
+            })}
+            onClick={togglePlayPause}
+          />
+
+          {/* 파형 표시 */}
+          <div id="waveform" ref={waveformRef} className="mt-4 rounded-md border-4 border-gray-300 bg-gray-100"></div>
+          {/* 시간 표시 */}
+          <div className="flex justify-between text-gray-700">
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+
+        {/* progress bar */}
         <div
-          className="absolute left-0 top-0 h-full rounded"
-          style={{
-            width: `${(currentTime / duration) * 100}%`,
-            backgroundColor: isPlaying ? "#3b82f6" : "#94a3b8",
-          }}></div>
+          className="relative mx-auto mb-8 h-4 w-full max-w-3xl cursor-pointer rounded bg-gray-300"
+          onClick={(e) => {
+            if (waveSurfer && duration) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const newTime = (clickX / rect.width) * duration;
+              waveSurfer.setTime(newTime);
+              setCurrentTime(newTime);
+            }
+          }}>
+          <div
+            className="absolute left-0 top-0 h-full rounded"
+            style={{
+              width: `${(currentTime / duration) * 100}%`,
+              backgroundColor: isPlaying ? "#3b82f6" : "#94a3b8",
+            }}></div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button onClick={() => skipTime(-5)} className="rounded bg-gray-400 px-4 py-2 text-white">
+            <FaBackward />
+          </button>
+          <button
+            onClick={togglePlayPause}
+            className={clsx("w-20 rounded px-4 py-1 text-white", {
+              "bg-blue-500": !isPlaying,
+              "bg-gray-700": isPlaying,
+            })}>
+            {isPlaying ? <CgPlayPause className={"mx-auto animate-pulse text-3xl"} /> : <FaPlay className={"mx-auto py-1 text-3xl"} />}
+          </button>
+          <button onClick={() => skipTime(5)} className="rounded bg-gray-400 px-4 py-2 text-white">
+            <FaForward />
+          </button>
+
+          <button onClick={() => regions?.clearRegions()} className="rounded bg-yellow-500 px-4 py-2 text-white">
+            Clear All Regions
+          </button>
+        </div>
+
+        <div className="mt-10 flex w-full items-center justify-around gap-4">
+          <label className="flex items-center gap-2">
+            Zoom in-out:
+            <input type="range" id="zoom-slider" min="10" max="1000" defaultValue="10" />
+          </label>
+
+          <label className="flex items-center gap-2">
+            Play-Speed:
+            <input type="range" min="0.5" max="2" step="0.1" value={playbackRate} onChange={(e) => setPlaybackRate(parseFloat(e.target.value))} />
+            <span>{playbackRate}x</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            Volume:
+            <input type="range" min="0" max="1" step="0.01" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} />
+            <span>{Math.round(volume * 100)}%</span>
+          </label>
+        </div>
+
+        <p className="mt-4 text-blue-500">
+          📖 <a href="https://wavesurfer.xyz/docs/classes/plugins_regions.RegionsPlugin">Regions plugin docs</a>
+        </p>
       </div>
-
-      <div className="flex items-center gap-4">
-        <button onClick={() => skipTime(-5)} className="rounded bg-gray-400 px-4 py-2 text-white">
-          <FaBackward />
-        </button>
-        <button
-          onClick={togglePlayPause}
-          className={clsx("w-20 rounded px-4 py-1 text-white", { "bg-blue-500": !isPlaying, "bg-gray-700": isPlaying })}>
-          {isPlaying ? <CgPlayPause className={"mx-auto animate-pulse text-3xl"} /> : <FaPlay className={"mx-auto py-1 text-3xl"} />}
-        </button>
-        <button onClick={() => skipTime(5)} className="rounded bg-gray-400 px-4 py-2 text-white">
-          <FaForward />
-        </button>
-
-        <button onClick={() => regions?.clearRegions()} className="rounded bg-yellow-500 px-4 py-2 text-white">
-          Clear All Regions
-        </button>
-      </div>
-
-      <div className="mt-10 flex w-full items-center justify-around gap-4">
-        <label className="flex items-center gap-2">
-          Zoom in-out:
-          <input type="range" id="zoom-slider" min="10" max="1000" defaultValue="10" />
-        </label>
-
-        <label className="flex items-center gap-2">
-          Play-Speed:
-          <input type="range" min="0.5" max="2" step="0.1" value={playbackRate} onChange={(e) => setPlaybackRate(parseFloat(e.target.value))} />
-          <span>{playbackRate}x</span>
-        </label>
-
-        <label className="flex items-center gap-2">
-          Volume:
-          <input type="range" min="0" max="1" step="0.01" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} />
-          <span>{Math.round(volume * 100)}%</span>
-        </label>
-      </div>
-
-      <p className="mt-4 text-blue-500">
-        📖 <a href="https://wavesurfer.xyz/docs/classes/plugins_regions.RegionsPlugin">Regions plugin docs</a>
-      </p>
     </div>
   );
 };
