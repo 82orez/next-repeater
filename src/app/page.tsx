@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.esm.js";
 import clsx from "clsx";
-import { FaBackward, FaForward } from "react-icons/fa6";
+import { FaBackward, FaForward, FaPlay } from "react-icons/fa6";
+import { CgPlayPause } from "react-icons/cg";
 
 const Home = () => {
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -267,13 +268,15 @@ const Home = () => {
       </div>
 
       <div className="flex items-center gap-4">
-        <button onClick={() => skipTime(-5)} className="rounded bg-gray-500 px-4 py-2 text-white">
+        <button onClick={() => skipTime(-5)} className="rounded bg-gray-400 px-4 py-2 text-white">
           <FaBackward />
         </button>
-        <button onClick={togglePlayPause} className={"w-20 rounded bg-blue-500 px-4 py-2 text-white"}>
-          {isPlaying ? "Pause" : "Play"}
+        <button
+          onClick={togglePlayPause}
+          className={clsx("w-20 rounded px-4 py-1 text-white", { "bg-blue-500": !isPlaying, "bg-gray-700": isPlaying })}>
+          {isPlaying ? <CgPlayPause className={"mx-auto animate-pulse text-3xl"} /> : <FaPlay className={"mx-auto py-1 text-3xl"} />}
         </button>
-        <button onClick={() => skipTime(5)} className="rounded bg-gray-500 px-4 py-2 text-white">
+        <button onClick={() => skipTime(5)} className="rounded bg-gray-400 px-4 py-2 text-white">
           <FaForward />
         </button>
 
