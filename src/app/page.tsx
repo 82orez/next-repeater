@@ -232,8 +232,9 @@ const Home = () => {
           playsInline
           className={clsx("mx-auto mb-4 w-full max-w-3xl", {
             hidden: fileType === null || fileType === "audio",
-            "pointer-events-none": fileType === "video",
+            // "pointer-events-none": fileType === "video",
           })}
+          onClick={togglePlayPause}
         />
 
         {/* 파형 표시 */}
@@ -269,7 +270,7 @@ const Home = () => {
         <button onClick={() => skipTime(-5)} className="rounded bg-gray-500 px-4 py-2 text-white">
           <FaBackward />
         </button>
-        <button onClick={togglePlayPause} className="w-20 rounded bg-blue-500 px-4 py-2 text-white">
+        <button onClick={togglePlayPause} className={"w-20 rounded bg-blue-500 px-4 py-2 text-white"}>
           {isPlaying ? "Pause" : "Play"}
         </button>
         <button onClick={() => skipTime(5)} className="rounded bg-gray-500 px-4 py-2 text-white">
