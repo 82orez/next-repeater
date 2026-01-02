@@ -16,7 +16,7 @@ export default function Waveform() {
   const loopTimerRef = useRef<number | null>(null);
   const loopGuardRef = useRef(false);
 
-  // store actions (stable)
+  // store actions
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
   const setPlaying = usePlayerStore((s) => s.setPlaying);
@@ -28,7 +28,7 @@ export default function Waveform() {
   const setLoopEnabled = usePlayerStore((s) => s.setLoopEnabled);
   const resetRepeatCount = usePlayerStore((s) => s.resetRepeatCount);
 
-  // store state used for sync effects
+  // store state for effects
   const audioUrl = usePlayerStore((s) => s.audioUrl);
   const playbackRate = usePlayerStore((s) => s.playbackRate);
   const volume = usePlayerStore((s) => s.volume);
@@ -36,6 +36,13 @@ export default function Waveform() {
   const loopEnabled = usePlayerStore((s) => s.loopEnabled);
   const loopA = usePlayerStore((s) => s.loopA);
   const loopB = usePlayerStore((s) => s.loopB);
+
+  // helper: 파형에 region 1개만 남기기
+  const clearAllRegions = () => {
+    const regions = regionsRef.current;
+    if (!regions) return;
+    Object.values(regions.getRegions()).forEach((r: any) => r.remove());
+  };
 
   // init
   useEffect(() => {
@@ -65,7 +72,6 @@ export default function Waveform() {
       setReady(true);
       setDuration(ws.getDuration());
 
-      // 최신 store값으로 적용
       const st = usePlayerStore.getState();
       ws.setPlaybackRate(st.playbackRate);
       ws.setVolume(st.volume);
@@ -75,7 +81,7 @@ export default function Waveform() {
     ws.on("pause", () => setPlaying(false));
     ws.on("finish", () => setPlaying(false));
 
-    // ✅ 핵심: timeupdate에서 항상 최신 store 상태를 읽는다!
+    // ✅ timeupdate: 최신 store 상태로 A–B 반복 처리
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
 
@@ -87,7 +93,6 @@ export default function Waveform() {
       if (loopGuardRef.current) return;
 
       if (t >= b) {
-        // 반복 횟수 제한
         if (st.repeatTarget > 0 && st.repeatCount >= st.repeatTarget) {
           ws.pause();
           return;
@@ -110,14 +115,40 @@ export default function Waveform() {
           loopTimerRef.current = window.setTimeout(jump, st.autoPauseMs);
         } else {
           ws.setTime(a);
-          // 재생 중이면 그대로 계속 재생됨 (WaveSurfer 동작)
           loopGuardRef.current = false;
         }
       }
     });
 
-    // region drag → AB set
-    const syncFromRegion = (r: any) => {
+    // ✅ 핵심: 드래그로 만들어진 region은 “값만 읽고 즉시 삭제”
+    regions.on("region-created", (r: any) => {
+      // 우리가 코드로 그리는 AB_REGION은 여기서 건드리지 않음
+      if (r.id === AB_REGION_ID) return;
+
+      const start = Math.max(0, r.start ?? 0);
+      const end = Math.max(0, r.end ?? 0);
+
+      // 드래그로 생성된 임시 region 제거 (이걸 안 하면 2개 보임)
+      try {
+        r.remove();
+      } catch {}
+
+      if (end <= start) return;
+
+      // store에 반영
+      setLoopA(start);
+      setLoopB(end);
+      setLoopEnabled(true);
+      resetRepeatCount();
+
+      // 파형에는 AB_REGION 1개만 다시 그리게(아래 effect가 처리하지만 즉시 정리)
+      clearAllRegions();
+    });
+
+    // AB_REGION을 유저가 리사이즈/드래그하면 값 반영
+    regions.on("region-updated", (r: any) => {
+      if (r.id !== AB_REGION_ID) return;
+
       const start = Math.max(0, r.start ?? 0);
       const end = Math.max(0, r.end ?? 0);
       if (end <= start) return;
@@ -126,24 +157,6 @@ export default function Waveform() {
       setLoopB(end);
       setLoopEnabled(true);
       resetRepeatCount();
-    };
-
-    // ✅ AB_REGION_ID(코드로 그리는 region)는 created에서 무시 (토글/반복 꼬임 방지)
-    regions.on("region-created", (r: any) => {
-      if (r.id === AB_REGION_ID) return;
-
-      // 사용자 드래그로 만든 region 하나만 유지(AB 제외)
-      Object.values(regions.getRegions()).forEach((x: any) => {
-        if (x.id !== r.id && x.id !== AB_REGION_ID) x.remove();
-      });
-
-      syncFromRegion(r);
-    });
-
-    // AB region을 사용자가 드래그/리사이즈하면 updated로 반영
-    regions.on("region-updated", (r: any) => {
-      if (r.id !== AB_REGION_ID) return; // 사용자 선택 region은 created에서 처리
-      syncFromRegion(r);
     });
 
     return () => {
@@ -166,7 +179,6 @@ export default function Waveform() {
   // load audio
   useEffect(() => {
     const ws = wsRef.current;
-    const regions = regionsRef.current;
     if (!ws) return;
 
     setReady(false);
@@ -174,9 +186,7 @@ export default function Waveform() {
     setDuration(0);
     setCurrentTime(0);
 
-    if (regions) {
-      Object.values(regions.getRegions()).forEach((r: any) => r.remove());
-    }
+    clearAllRegions();
 
     if (!audioUrl) return;
     ws.load(audioUrl);
@@ -192,15 +202,12 @@ export default function Waveform() {
     wsRef.current?.setVolume(volume);
   }, [volume]);
 
-  // show AB region on waveform (loopA/loopB)
+  // ✅ loopA/loopB 변경 시: region은 “딱 1개(AB_REGION)”만 유지
   useEffect(() => {
-    const ws = wsRef.current;
     const regions = regionsRef.current;
-    if (!ws || !regions) return;
+    if (!regions) return;
 
-    // remove previous AB region
-    const existing = regions.getRegions()[AB_REGION_ID] as any;
-    if (existing) existing.remove();
+    clearAllRegions();
 
     const a = loopA;
     const b = loopB;
@@ -219,7 +226,7 @@ export default function Waveform() {
   return (
     <div className="w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
       <div ref={containerRef} className="w-full" />
-      <p className="mt-2 text-xs text-zinc-500">파형을 드래그하면 A–B 구간이 선택되고 반복이 켜집니다.</p>
+      <p className="mt-2 text-xs text-zinc-500">파형에서 드래그로 구간을 잡으면, 반복구간은 항상 1개만 표시됩니다.</p>
     </div>
   );
 }
