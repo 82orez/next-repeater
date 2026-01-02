@@ -8,9 +8,9 @@ import type WaveSurfer from "wavesurfer.js";
 export type Bookmark = {
   id: string;
   type: "POINT" | "REGION";
-  time?: number; // POINT
-  start?: number; // REGION
-  end?: number; // REGION
+  time?: number;
+  start?: number;
+  end?: number;
   label: string;
   tag?: string;
   createdAt: number;
@@ -24,35 +24,34 @@ type RecentItem = {
 };
 
 type PlayerState = {
-  // wavesurfer handle (persist 제외)
   ws: WaveSurfer | null;
   setWs: (ws: WaveSurfer | null) => void;
 
-  // source
   audioUrl: string | null;
   fileName: string | null;
 
-  // playback
   isReady: boolean;
   isPlaying: boolean;
   duration: number;
   currentTime: number;
-  playbackRate: number; // 0.5 ~ 2.0
-  volume: number; // 0 ~ 1
+  playbackRate: number;
+  volume: number;
 
-  // A-B loop
   loopEnabled: boolean;
   loopA: number | null;
   loopB: number | null;
-  autoPauseMs: number; // 반복 사이 자동 멈춤
-  repeatTarget: number; // 0이면 무제한
+
+  autoPauseMs: number;
+  repeatTarget: number;
   repeatCount: number;
 
-  // data
+  // ✅ 추가: 경계 부드럽게
+  preRollSec: number; // 0~2초 추천
+  fadeMs: number; // 0~800ms 추천
+
   bookmarks: Bookmark[];
   recent: RecentItem[];
 
-  // actions (state setters)
   setSource: (payload: { audioUrl: string; fileName?: string | null }) => void;
   setReady: (ready: boolean) => void;
   setPlaying: (playing: boolean) => void;
@@ -62,24 +61,27 @@ type PlayerState = {
   setPlaybackRate: (r: number) => void;
   setVolume: (v: number) => void;
 
+  // ✅ A/B 자동 정렬 포함
   setLoopA: (t: number | null) => void;
   setLoopB: (t: number | null) => void;
+
   setLoopEnabled: (v: boolean) => void;
   setAutoPauseMs: (ms: number) => void;
   setRepeatTarget: (n: number) => void;
   incRepeatCount: () => void;
   resetRepeatCount: () => void;
 
-  // bookmarks
+  // ✅ 추가 설정
+  setPreRollSec: (sec: number) => void;
+  setFadeMs: (ms: number) => void;
+
   addBookmark: (b: Bookmark) => void;
   updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
   removeBookmark: (id: string) => void;
 
-  // recent
   upsertRecent: (item: { fileName: string; audioUrl: string; lastTime: number }) => void;
   updateRecentTime: (audioUrl: string, lastTime: number) => void;
 
-  // wavesurfer controls
   playPause: () => void;
   play: () => void;
   pause: () => void;
@@ -110,9 +112,14 @@ export const usePlayerStore = create<PlayerState>()(
       loopEnabled: false,
       loopA: null,
       loopB: null,
+
       autoPauseMs: 0,
       repeatTarget: 0,
       repeatCount: 0,
+
+      // ✅ 기본값 추천
+      preRollSec: 0.15,
+      fadeMs: 120,
 
       bookmarks: [],
       recent: [],
@@ -149,55 +156,47 @@ export const usePlayerStore = create<PlayerState>()(
         if (ws) ws.setVolume(v);
       },
 
-      setLoopA: (loopA) => set({ loopA }),
-      setLoopB: (loopB) => set({ loopB }),
+      // ✅ 핵심: A/B 자동 정렬(스왑)
+      setLoopA: (loopA) => {
+        const b = get().loopB;
+        if (loopA == null) return set({ loopA: null });
+        if (b != null && loopA > b) return set({ loopA: b, loopB: loopA });
+        return set({ loopA });
+      },
+
+      setLoopB: (loopB) => {
+        const a = get().loopA;
+        if (loopB == null) return set({ loopB: null });
+        if (a != null && loopB < a) return set({ loopA: loopB, loopB: a });
+        return set({ loopB });
+      },
+
       setLoopEnabled: (loopEnabled) => set({ loopEnabled }),
       setAutoPauseMs: (autoPauseMs) => set({ autoPauseMs }),
       setRepeatTarget: (repeatTarget) => set({ repeatTarget }),
       incRepeatCount: () => set({ repeatCount: get().repeatCount + 1 }),
       resetRepeatCount: () => set({ repeatCount: 0 }),
 
+      // ✅ 추가 설정
+      setPreRollSec: (sec) => set({ preRollSec: Math.min(2, Math.max(0, sec)) }),
+      setFadeMs: (ms) => set({ fadeMs: Math.min(800, Math.max(0, ms)) }),
+
       addBookmark: (b) => set({ bookmarks: [b, ...get().bookmarks] }),
-      updateBookmark: (id, patch) =>
-        set({
-          bookmarks: get().bookmarks.map((x) => (x.id === id ? { ...x, ...patch } : x)),
-        }),
+      updateBookmark: (id, patch) => set({ bookmarks: get().bookmarks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }),
       removeBookmark: (id) => set({ bookmarks: get().bookmarks.filter((x) => x.id !== id) }),
 
       upsertRecent: (item) => {
         const next: RecentItem[] = [
-          {
-            fileName: item.fileName,
-            audioUrl: item.audioUrl,
-            lastTime: item.lastTime,
-            lastOpenedAt: Date.now(),
-          },
+          { fileName: item.fileName, audioUrl: item.audioUrl, lastTime: item.lastTime, lastOpenedAt: Date.now() },
           ...get().recent.filter((r) => r.audioUrl !== item.audioUrl),
         ].slice(0, 10);
         set({ recent: next });
       },
+      updateRecentTime: (audioUrl, lastTime) => set({ recent: get().recent.map((r) => (r.audioUrl === audioUrl ? { ...r, lastTime } : r)) }),
 
-      updateRecentTime: (audioUrl, lastTime) =>
-        set({
-          recent: get().recent.map((r) => (r.audioUrl === audioUrl ? { ...r, lastTime } : r)),
-        }),
-
-      // controls
-      playPause: () => {
-        const ws = get().ws;
-        if (!ws) return;
-        ws.playPause();
-      },
-      play: () => {
-        const ws = get().ws;
-        if (!ws) return;
-        ws.play();
-      },
-      pause: () => {
-        const ws = get().ws;
-        if (!ws) return;
-        ws.pause();
-      },
+      playPause: () => get().ws?.playPause(),
+      play: () => get().ws?.play(),
+      pause: () => get().ws?.pause(),
       stop: () => {
         const ws = get().ws;
         if (!ws) return;
@@ -220,13 +219,15 @@ export const usePlayerStore = create<PlayerState>()(
       },
     }),
     {
-      name: "repeat-player-v2",
+      name: "repeat-player-v3",
       storage,
       partialize: (s) => ({
         playbackRate: s.playbackRate,
         volume: s.volume,
         autoPauseMs: s.autoPauseMs,
         repeatTarget: s.repeatTarget,
+        preRollSec: s.preRollSec,
+        fadeMs: s.fadeMs,
         bookmarks: s.bookmarks,
         recent: s.recent,
       }),

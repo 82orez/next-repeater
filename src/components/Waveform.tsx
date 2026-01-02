@@ -16,7 +16,8 @@ export default function Waveform() {
   const loopTimerRef = useRef<number | null>(null);
   const loopGuardRef = useRef(false);
 
-  // store actions
+  const fadeRafRef = useRef<number | null>(null);
+
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
   const setPlaying = usePlayerStore((s) => s.setPlaying);
@@ -28,7 +29,6 @@ export default function Waveform() {
   const setLoopEnabled = usePlayerStore((s) => s.setLoopEnabled);
   const resetRepeatCount = usePlayerStore((s) => s.resetRepeatCount);
 
-  // store state for effects
   const audioUrl = usePlayerStore((s) => s.audioUrl);
   const playbackRate = usePlayerStore((s) => s.playbackRate);
   const volume = usePlayerStore((s) => s.volume);
@@ -37,14 +37,40 @@ export default function Waveform() {
   const loopA = usePlayerStore((s) => s.loopA);
   const loopB = usePlayerStore((s) => s.loopB);
 
-  // helper: 파형에 region 1개만 남기기
   const clearAllRegions = () => {
     const regions = regionsRef.current;
     if (!regions) return;
     Object.values(regions.getRegions()).forEach((r: any) => r.remove());
   };
 
-  // init
+  const cancelFade = () => {
+    if (fadeRafRef.current) {
+      cancelAnimationFrame(fadeRafRef.current);
+      fadeRafRef.current = null;
+    }
+  };
+
+  const rampVolume = (from: number, to: number, ms: number, done?: () => void) => {
+    cancelFade();
+    if (ms <= 0) {
+      wsRef.current?.setVolume(to);
+      done?.();
+      return;
+    }
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      const v = from + (to - from) * t;
+      wsRef.current?.setVolume(v);
+      if (t < 1) fadeRafRef.current = requestAnimationFrame(step);
+      else {
+        fadeRafRef.current = null;
+        done?.();
+      }
+    };
+    fadeRafRef.current = requestAnimationFrame(step);
+  };
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -81,18 +107,22 @@ export default function Waveform() {
     ws.on("pause", () => setPlaying(false));
     ws.on("finish", () => setPlaying(false));
 
-    // ✅ timeupdate: 최신 store 상태로 A–B 반복 처리
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
 
       const st = usePlayerStore.getState();
-      const a = st.loopA;
-      const b = st.loopB;
+      const a0 = st.loopA;
+      const b0 = st.loopB;
 
-      if (!st.loopEnabled || a == null || b == null || b <= a) return;
+      if (!st.loopEnabled || a0 == null || b0 == null) return;
+
+      const a = Math.min(a0, b0);
+      const b = Math.max(a0, b0);
+      if (b <= a) return;
       if (loopGuardRef.current) return;
 
       if (t >= b) {
+        // 반복 횟수 제한
         if (st.repeatTarget > 0 && st.repeatCount >= st.repeatTarget) {
           ws.pause();
           return;
@@ -101,54 +131,82 @@ export default function Waveform() {
         loopGuardRef.current = true;
         st.incRepeatCount();
 
-        const jump = () => {
+        const targetVol = st.volume;
+        const preRoll = Math.max(0, st.preRollSec);
+        const fadeMs = Math.max(0, st.fadeMs);
+        const pauseMs = Math.max(0, st.autoPauseMs);
+
+        const jumpStart = Math.max(0, a - preRoll);
+
+        const doJumpAndPlay = () => {
           const ws2 = wsRef.current;
           if (!ws2) return;
-          ws2.setTime(a);
-          ws2.play();
-          loopGuardRef.current = false;
+
+          ws2.setTime(jumpStart);
+
+          // fade-in + play
+          if (fadeMs > 0) {
+            ws2.setVolume(0);
+            ws2.play();
+            rampVolume(0, targetVol, fadeMs, () => {
+              loopGuardRef.current = false;
+            });
+          } else {
+            ws2.setVolume(targetVol);
+            ws2.play();
+            loopGuardRef.current = false;
+          }
         };
 
-        if (st.autoPauseMs > 0) {
-          ws.pause();
-          if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
-          loopTimerRef.current = window.setTimeout(jump, st.autoPauseMs);
+        const afterPause = () => {
+          if (pauseMs > 0) {
+            if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
+            loopTimerRef.current = window.setTimeout(doJumpAndPlay, pauseMs);
+          } else {
+            doJumpAndPlay();
+          }
+        };
+
+        // fade-out + pause → (autoPause) → jump
+        if (fadeMs > 0) {
+          const from = targetVol; // 유저 볼륨 기준으로 자연스럽게
+          rampVolume(from, 0, fadeMs, () => {
+            ws.pause();
+            afterPause();
+          });
         } else {
-          ws.setTime(a);
-          loopGuardRef.current = false;
+          // 페이드 없이: autoPause 있으면 pause 후 점프, 없으면 즉시 점프(끊김 최소)
+          if (pauseMs > 0) ws.pause();
+          afterPause();
         }
       }
     });
 
-    // ✅ 핵심: 드래그로 만들어진 region은 “값만 읽고 즉시 삭제”
+    // 드래그로 만든 region은 값만 읽고 즉시 삭제 → AB 1개만 유지
     regions.on("region-created", (r: any) => {
-      // 우리가 코드로 그리는 AB_REGION은 여기서 건드리지 않음
       if (r.id === AB_REGION_ID) return;
 
       const start = Math.max(0, r.start ?? 0);
       const end = Math.max(0, r.end ?? 0);
 
-      // 드래그로 생성된 임시 region 제거 (이걸 안 하면 2개 보임)
       try {
         r.remove();
       } catch {}
 
       if (end <= start) return;
 
-      // store에 반영
+      // store setter가 자동 정렬 처리함
       setLoopA(start);
       setLoopB(end);
       setLoopEnabled(true);
       resetRepeatCount();
 
-      // 파형에는 AB_REGION 1개만 다시 그리게(아래 effect가 처리하지만 즉시 정리)
       clearAllRegions();
     });
 
-    // AB_REGION을 유저가 리사이즈/드래그하면 값 반영
+    // AB region 리사이즈/드래그 시도 시 store 반영(자동 정렬)
     regions.on("region-updated", (r: any) => {
       if (r.id !== AB_REGION_ID) return;
-
       const start = Math.max(0, r.start ?? 0);
       const end = Math.max(0, r.end ?? 0);
       if (end <= start) return;
@@ -160,6 +218,7 @@ export default function Waveform() {
     });
 
     return () => {
+      cancelFade();
       if (loopTimerRef.current) {
         window.clearTimeout(loopTimerRef.current);
         loopTimerRef.current = null;
@@ -176,7 +235,6 @@ export default function Waveform() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // load audio
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws) return;
@@ -187,31 +245,33 @@ export default function Waveform() {
     setCurrentTime(0);
 
     clearAllRegions();
+    cancelFade();
 
     if (!audioUrl) return;
     ws.load(audioUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
-  // sync rate & volume
   useEffect(() => {
     wsRef.current?.setPlaybackRate(playbackRate);
   }, [playbackRate]);
 
   useEffect(() => {
+    // 유저가 볼륨을 바꾸면 즉시 반영
     wsRef.current?.setVolume(volume);
   }, [volume]);
 
-  // ✅ loopA/loopB 변경 시: region은 “딱 1개(AB_REGION)”만 유지
+  // AB region은 항상 1개만, 정렬된 범위로 표시
   useEffect(() => {
     const regions = regionsRef.current;
     if (!regions) return;
 
     clearAllRegions();
 
-    const a = loopA;
-    const b = loopB;
-    if (a == null || b == null || b <= a) return;
+    if (loopA == null || loopB == null) return;
+    const a = Math.min(loopA, loopB);
+    const b = Math.max(loopA, loopB);
+    if (b <= a) return;
 
     regions.addRegion({
       id: AB_REGION_ID,
@@ -226,7 +286,7 @@ export default function Waveform() {
   return (
     <div className="w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
       <div ref={containerRef} className="w-full" />
-      <p className="mt-2 text-xs text-zinc-500">파형에서 드래그로 구간을 잡으면, 반복구간은 항상 1개만 표시됩니다.</p>
+      <p className="mt-2 text-xs text-zinc-500">A–B는 자동 정렬되며, 반복 경계에서 프리롤/페이드로 자연스럽게 반복됩니다.</p>
     </div>
   );
 }
