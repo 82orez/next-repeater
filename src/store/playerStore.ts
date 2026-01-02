@@ -14,11 +14,18 @@ type PlayerState = {
   playbackRate: number; // 0.5 ~ 2.0
   isPlaying: boolean;
 
+  // ✅ 현재 재생시간/길이(버튼이 이 값을 사용)
+  currentTime: number;
+  duration: number;
+
   ab: AB;
 
   setAudio: (audioUrl: string, fileName: string) => void;
   setRate: (rate: number) => void;
   setPlaying: (v: boolean) => void;
+
+  setCurrentTime: (t: number) => void;
+  setDuration: (d: number) => void;
 
   setA: (t: number) => void;
   setB: (t: number) => void;
@@ -35,6 +42,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playbackRate: 1.0,
   isPlaying: false,
 
+  currentTime: 0,
+  duration: 0,
+
   ab: { a: null, b: null, enabled: false, regionId: null },
 
   setAudio: (audioUrl, fileName) =>
@@ -42,11 +52,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       audioUrl,
       fileName,
       isPlaying: false,
+      currentTime: 0,
+      duration: 0,
       ab: { a: null, b: null, enabled: false, regionId: null },
     }),
 
   setRate: (rate) => set({ playbackRate: rate }),
   setPlaying: (v) => set({ isPlaying: v }),
+
+  setCurrentTime: (t) => set({ currentTime: t }),
+  setDuration: (d) => set({ duration: d }),
 
   setA: (t) => set({ ab: { ...get().ab, a: t } }),
   setB: (t) => set({ ab: { ...get().ab, b: t } }),

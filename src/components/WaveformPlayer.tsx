@@ -10,7 +10,7 @@ export default function WaveformPlayer() {
   const wsRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<ReturnType<typeof RegionsPlugin.create> | null>(null);
 
-  const { audioUrl, playbackRate, ab, setPlaying, setRegionId } = usePlayerStore();
+  const { audioUrl, playbackRate, ab, setPlaying, setRegionId, setCurrentTime, setDuration, setA, setB } = usePlayerStore();
 
   const canLoad = useMemo(() => !!audioUrl && !!containerRef.current, [audioUrl]);
 
@@ -32,30 +32,56 @@ export default function WaveformPlayer() {
 
       // 드래그로 구간 선택 생성
       regions.enableDragSelection({
-        // 색은 UI 취향대로 조절
         color: "rgba(99, 102, 241, 0.15)",
       });
 
-      // region 생성되면 AB로 채택
+      // region 생성되면 AB로 채택 + store A/B 동기화
       regions.on("region-created", (region) => {
-        // 사용자가 여러개 만들 수 있으니, 기존 활성 region 제거 정책을 택할 수 있음
-        // 여기서는 "마지막으로 만든 1개만 유지"
+        // 마지막으로 만든 1개만 유지
         regions.getRegions().forEach((r) => {
           if (r.id !== region.id) r.remove();
         });
+
         setRegionId(region.id);
+        setA(region.start);
+        setB(region.end);
       });
 
-      // 루프: region 밖으로 나가면 다시 재생
+      // region 수정(드래그/리사이즈) 시 store A/B 갱신
+      regions.on("region-updated", (region) => {
+        const state = usePlayerStore.getState();
+        if (state.ab.regionId && region.id !== state.ab.regionId) return;
+        setA(region.start);
+        setB(region.end);
+      });
+
+      // ✅ 루프: region-out 때 최신 store state 기준으로 동작 (stale closure 방지)
       regions.on("region-out", (region) => {
-        if (!ab.enabled) return;
-        if (ab.regionId && region.id !== ab.regionId) return;
+        const state = usePlayerStore.getState();
+        if (!state.ab.enabled) return;
+        if (state.ab.regionId && region.id !== state.ab.regionId) return;
         region.play();
       });
 
       ws.on("play", () => setPlaying(true));
       ws.on("pause", () => setPlaying(false));
       ws.on("finish", () => setPlaying(false));
+
+      // ✅ 길이/시간 store 동기화
+      ws.on("ready", () => {
+        setDuration(ws.getDuration() || 0);
+      });
+
+      // wavesurfer v7: timeupdate 이벤트가 있음
+      const onTime = (t?: number) => {
+        // timeupdate는 number를 주는 경우가 많지만, 안전하게 getCurrentTime도 사용
+        const time = typeof t === "number" ? t : (ws.getCurrentTime?.() ?? 0);
+        setCurrentTime(time);
+      };
+
+      ws.on("timeupdate", onTime as any);
+      // 일부 환경에서는 audioprocess가 더 자주/안정적으로 들어오기도 함
+      ws.on("audioprocess", onTime as any);
 
       wsRef.current = ws;
     }
@@ -71,10 +97,12 @@ export default function WaveformPlayer() {
 
     ws.load(audioUrl);
 
-    return () => {
-      // objectURL revoke는 audioUrl을 만든 쪽에서 관리하는 편이 안전
-    };
-  }, [audioUrl]);
+    // 로드할 때 초기화
+    setCurrentTime(0);
+    setDuration(0);
+
+    return () => {};
+  }, [audioUrl, setCurrentTime, setDuration]);
 
   // playback rate
   useEffect(() => {
@@ -88,14 +116,12 @@ export default function WaveformPlayer() {
     if (!ws || !regions) return;
 
     const { a, b } = ab;
-
-    // A,B 둘 다 있어야 region 생성
     if (a == null || b == null) return;
 
     const start = Math.min(a, b);
     const end = Math.max(a, b);
 
-    // 기존 활성 region 제거 후 1개만 생성
+    // 기존 region 제거 후 1개만 생성
     regions.getRegions().forEach((r) => r.remove());
 
     const region = regions.addRegion({
@@ -110,12 +136,12 @@ export default function WaveformPlayer() {
 
     // AB enabled면 바로 그 구간 재생
     if (ab.enabled) region.play();
-  }, [ab.a, ab.b]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ab.a, ab.b, ab.enabled, setRegionId]);
 
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm">
       <div ref={containerRef} />
-      <p className="mt-2 text-xs text-gray-500">드래그로 구간 선택 / A-B 반복 가능</p>
+      <p className="mt-2 text-xs text-gray-500">드래그로 구간 선택 / Set A·Set B 버튼으로 현재 시간 기준 A-B 지정</p>
     </div>
   );
 }
