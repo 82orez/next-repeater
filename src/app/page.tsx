@@ -1,9 +1,6 @@
-import Link from "next/link";
+// src/app/page.tsx
+import Player from "@/components/Player";
 
-export default function Home() {
-  return (
-    <div className="flex h-screen items-center justify-center">
-      <Link href={"player"}>Go to Repeater!</Link>
-    </div>
-  );
+export default function Page() {
+  return <Player />;
 }
