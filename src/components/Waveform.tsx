@@ -16,19 +16,8 @@ export default function Waveform() {
   const loopTimerRef = useRef<number | null>(null);
   const loopGuardRef = useRef(false);
 
+  // store actions (stable)
   const setWs = usePlayerStore((s) => s.setWs);
-
-  const audioUrl = usePlayerStore((s) => s.audioUrl);
-  const playbackRate = usePlayerStore((s) => s.playbackRate);
-  const volume = usePlayerStore((s) => s.volume);
-
-  const loopEnabled = usePlayerStore((s) => s.loopEnabled);
-  const loopA = usePlayerStore((s) => s.loopA);
-  const loopB = usePlayerStore((s) => s.loopB);
-  const autoPauseMs = usePlayerStore((s) => s.autoPauseMs);
-  const repeatTarget = usePlayerStore((s) => s.repeatTarget);
-  const repeatCount = usePlayerStore((s) => s.repeatCount);
-
   const setReady = usePlayerStore((s) => s.setReady);
   const setPlaying = usePlayerStore((s) => s.setPlaying);
   const setDuration = usePlayerStore((s) => s.setDuration);
@@ -38,7 +27,15 @@ export default function Waveform() {
   const setLoopB = usePlayerStore((s) => s.setLoopB);
   const setLoopEnabled = usePlayerStore((s) => s.setLoopEnabled);
   const resetRepeatCount = usePlayerStore((s) => s.resetRepeatCount);
-  const incRepeatCount = usePlayerStore((s) => s.incRepeatCount);
+
+  // store state used for sync effects
+  const audioUrl = usePlayerStore((s) => s.audioUrl);
+  const playbackRate = usePlayerStore((s) => s.playbackRate);
+  const volume = usePlayerStore((s) => s.volume);
+
+  const loopEnabled = usePlayerStore((s) => s.loopEnabled);
+  const loopA = usePlayerStore((s) => s.loopA);
+  const loopB = usePlayerStore((s) => s.loopB);
 
   // init
   useEffect(() => {
@@ -67,46 +64,53 @@ export default function Waveform() {
     ws.on("ready", () => {
       setReady(true);
       setDuration(ws.getDuration());
-      ws.setPlaybackRate(playbackRate);
-      ws.setVolume(volume);
+
+      // 최신 store값으로 적용
+      const st = usePlayerStore.getState();
+      ws.setPlaybackRate(st.playbackRate);
+      ws.setVolume(st.volume);
     });
 
     ws.on("play", () => setPlaying(true));
     ws.on("pause", () => setPlaying(false));
     ws.on("finish", () => setPlaying(false));
 
+    // ✅ 핵심: timeupdate에서 항상 최신 store 상태를 읽는다!
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
 
-      // A-B loop enforcement
-      const a = loopA;
-      const b = loopB;
-      if (!loopEnabled || a == null || b == null || b <= a) return;
+      const st = usePlayerStore.getState();
+      const a = st.loopA;
+      const b = st.loopB;
+
+      if (!st.loopEnabled || a == null || b == null || b <= a) return;
       if (loopGuardRef.current) return;
 
       if (t >= b) {
-        // repeat target check
-        if (repeatTarget > 0 && repeatCount >= repeatTarget) {
+        // 반복 횟수 제한
+        if (st.repeatTarget > 0 && st.repeatCount >= st.repeatTarget) {
           ws.pause();
           return;
         }
 
         loopGuardRef.current = true;
-        incRepeatCount();
+        st.incRepeatCount();
 
         const jump = () => {
-          if (!wsRef.current) return;
-          wsRef.current.setTime(a);
-          wsRef.current.play();
+          const ws2 = wsRef.current;
+          if (!ws2) return;
+          ws2.setTime(a);
+          ws2.play();
           loopGuardRef.current = false;
         };
 
-        if (autoPauseMs > 0) {
+        if (st.autoPauseMs > 0) {
           ws.pause();
           if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
-          loopTimerRef.current = window.setTimeout(jump, autoPauseMs);
+          loopTimerRef.current = window.setTimeout(jump, st.autoPauseMs);
         } else {
           ws.setTime(a);
+          // 재생 중이면 그대로 계속 재생됨 (WaveSurfer 동작)
           loopGuardRef.current = false;
         }
       }
@@ -117,21 +121,30 @@ export default function Waveform() {
       const start = Math.max(0, r.start ?? 0);
       const end = Math.max(0, r.end ?? 0);
       if (end <= start) return;
+
       setLoopA(start);
       setLoopB(end);
       setLoopEnabled(true);
       resetRepeatCount();
     };
 
+    // ✅ AB_REGION_ID(코드로 그리는 region)는 created에서 무시 (토글/반복 꼬임 방지)
     regions.on("region-created", (r: any) => {
-      // 새로 만든 region 하나만 남기기(AB region 제외)
+      if (r.id === AB_REGION_ID) return;
+
+      // 사용자 드래그로 만든 region 하나만 유지(AB 제외)
       Object.values(regions.getRegions()).forEach((x: any) => {
         if (x.id !== r.id && x.id !== AB_REGION_ID) x.remove();
       });
+
       syncFromRegion(r);
     });
 
-    regions.on("region-updated", (r: any) => syncFromRegion(r));
+    // AB region을 사용자가 드래그/리사이즈하면 updated로 반영
+    regions.on("region-updated", (r: any) => {
+      if (r.id !== AB_REGION_ID) return; // 사용자 선택 region은 created에서 처리
+      syncFromRegion(r);
+    });
 
     return () => {
       if (loopTimerRef.current) {
@@ -141,6 +154,7 @@ export default function Waveform() {
       try {
         disableDrag?.();
       } catch {}
+
       ws.destroy();
       wsRef.current = null;
       regionsRef.current = null;
@@ -178,7 +192,7 @@ export default function Waveform() {
     wsRef.current?.setVolume(volume);
   }, [volume]);
 
-  // ensure AB region shown on waveform when loop changes
+  // show AB region on waveform (loopA/loopB)
   useEffect(() => {
     const ws = wsRef.current;
     const regions = regionsRef.current;
@@ -198,7 +212,6 @@ export default function Waveform() {
       end: b,
       drag: true,
       resize: true,
-      // loopEnabled 상태에 따라 색만 바꾸고 싶으면 여기서 조정
       color: loopEnabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
     });
   }, [loopA, loopB, loopEnabled]);
@@ -206,7 +219,7 @@ export default function Waveform() {
   return (
     <div className="w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
       <div ref={containerRef} className="w-full" />
-      <p className="mt-2 text-xs text-zinc-500">파형을 드래그하면 A–B 구간이 선택됩니다. (A/B 버튼으로도 지정 가능)</p>
+      <p className="mt-2 text-xs text-zinc-500">파형을 드래그하면 A–B 구간이 선택되고 반복이 켜집니다.</p>
     </div>
   );
 }
