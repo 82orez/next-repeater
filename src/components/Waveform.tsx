@@ -1,22 +1,29 @@
 // src/components/Waveform.tsx
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import { usePlayerStore } from "@/store/playerStore";
 
 const AB_REGION_ID = "ab_region";
-const MARK_REGION_ID = "mark_region"; // ✅ A(또는 B 단독) 표시용
+const MARK_A_ID = "mark_a";
+const MARK_B_ID = "mark_b";
+
+type LabelInfo = { mode: "NONE" } | { mode: "A"; t: number } | { mode: "B"; t: number } | { mode: "AB"; a: number; b: number };
 
 export default function Waveform() {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
   const wsRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<ReturnType<typeof Regions.create> | null>(null);
 
   const loopTimerRef = useRef<number | null>(null);
   const loopGuardRef = useRef(false);
   const fadeRafRef = useRef<number | null>(null);
+
+  const [labelInfo, setLabelInfo] = useState<LabelInfo>({ mode: "NONE" });
 
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
@@ -71,6 +78,17 @@ export default function Waveform() {
     fadeRafRef.current = requestAnimationFrame(step);
   };
 
+  // label 위치 계산(퍼센트)
+  const labelStyle = useMemo(() => {
+    const ws = wsRef.current;
+    const dur = ws?.getDuration?.() || 0;
+    const pct = (t: number) => {
+      if (!dur || dur <= 0) return 0;
+      return Math.min(100, Math.max(0, (t / dur) * 100));
+    };
+    return { pct };
+  }, [audioUrl, loopA, loopB, labelInfo.mode]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -107,14 +125,12 @@ export default function Waveform() {
     ws.on("pause", () => setPlaying(false));
     ws.on("finish", () => setPlaying(false));
 
-    // timeupdate: 최신 store 상태로 A–B 반복 처리(이미 적용된 버전)
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
 
       const st = usePlayerStore.getState();
       const a0 = st.loopA;
       const b0 = st.loopB;
-
       if (!st.loopEnabled || a0 == null || b0 == null) return;
 
       const a = Math.min(a0, b0);
@@ -179,9 +195,9 @@ export default function Waveform() {
       }
     });
 
-    // 드래그로 만든 region은 값만 읽고 즉시 삭제 → AB 1개만 유지
+    // drag region -> store 반영 후 삭제 (항상 region 1개)
     regions.on("region-created", (r: any) => {
-      if (r.id === AB_REGION_ID || r.id === MARK_REGION_ID) return;
+      if (r.id === AB_REGION_ID || r.id === MARK_A_ID || r.id === MARK_B_ID) return;
 
       const start = Math.max(0, r.start ?? 0);
       const end = Math.max(0, r.end ?? 0);
@@ -200,7 +216,7 @@ export default function Waveform() {
       clearAllRegions();
     });
 
-    // ✅ region 업데이트: AB 구간이면 A/B 둘 다, 마커면 현재 상태에 따라 A 또는 B만 업데이트
+    // region drag/resize
     regions.on("region-updated", (r: any) => {
       const start = Math.max(0, r.start ?? 0);
       const end = Math.max(0, r.end ?? 0);
@@ -214,22 +230,16 @@ export default function Waveform() {
         return;
       }
 
-      if (r.id === MARK_REGION_ID) {
-        // 마커는 "단독 지정 중"에만 존재
-        const st = usePlayerStore.getState();
-        if (st.loopA != null && st.loopB == null) {
-          setLoopA(start);
-          resetRepeatCount();
-        } else if (st.loopA == null && st.loopB != null) {
-          setLoopB(start);
-          resetRepeatCount();
-        } else if (st.loopA != null && st.loopB != null) {
-          // 혹시 상태가 바뀐 경우 안전 처리: AB로 승격
-          setLoopA(start);
-          setLoopB(end);
-          setLoopEnabled(true);
-          resetRepeatCount();
-        }
+      if (r.id === MARK_A_ID) {
+        setLoopA(start);
+        resetRepeatCount();
+        return;
+      }
+
+      if (r.id === MARK_B_ID) {
+        setLoopB(start);
+        resetRepeatCount();
+        return;
       }
     });
 
@@ -263,12 +273,14 @@ export default function Waveform() {
 
     clearAllRegions();
     cancelFade();
+    setLabelInfo({ mode: "NONE" });
 
     if (!audioUrl) return;
     ws.load(audioUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
+  // rate / volume sync
   useEffect(() => {
     wsRef.current?.setPlaybackRate(playbackRate);
   }, [playbackRate]);
@@ -277,9 +289,8 @@ export default function Waveform() {
     wsRef.current?.setVolume(volume);
   }, [volume]);
 
-  // ✅ 핵심: 파형에는 "항상 1개 region"만 표시
-  // - A만 있으면: A 마커(짧은 구간)
-  // - A,B 있으면: AB 구간
+  // ✅ 파형 표시 region은 1개만 (A마커 / B마커 / AB구간)
+  // + 라벨 정보(labelInfo)도 같이 업데이트
   useEffect(() => {
     const regions = regionsRef.current;
     const ws = wsRef.current;
@@ -291,9 +302,9 @@ export default function Waveform() {
     const b0 = loopB;
 
     const dur = ws.getDuration() || 0;
-    const EPS = 0.08; // ✅ 마커 두께(초) - 취향에 따라 0.05~0.12 추천
+    const EPS = 0.08;
 
-    // AB가 유효하면 AB만 표시
+    // AB 유효 -> AB 표시
     if (a0 != null && b0 != null) {
       const a = Math.min(a0, b0);
       const b = Math.max(a0, b0);
@@ -306,34 +317,83 @@ export default function Waveform() {
           resize: true,
           color: loopEnabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
         });
+        setLabelInfo({ mode: "AB", a, b });
         return;
       }
     }
 
-    // A만 있는 경우: A 마커 표시
+    // A만 -> A 마커
     if (a0 != null && b0 == null) {
       const start = dur > 0 ? Math.min(a0, Math.max(0, dur - EPS)) : a0;
-      const end = start + EPS;
-
       regions.addRegion({
-        id: MARK_REGION_ID,
+        id: MARK_A_ID,
         start,
-        end,
-        drag: true, // 마커 자체를 드래그해서 A 미세조정 가능
+        end: start + EPS,
+        drag: true,
         resize: false,
-        color: "rgba(245, 158, 11, 0.22)", // amber 느낌 (A 지정중 강조)
+        color: "rgba(245, 158, 11, 0.22)",
       });
+      setLabelInfo({ mode: "A", t: start });
       return;
     }
 
-    // (선택) B만 있는 경우도 마커 표시하고 싶다면 아래 활성화
-    // if (a0 == null && b0 != null) { ... }
+    // ✅ B만 -> B 마커
+    if (a0 == null && b0 != null) {
+      const start = dur > 0 ? Math.min(b0, Math.max(0, dur - EPS)) : b0;
+      regions.addRegion({
+        id: MARK_B_ID,
+        start,
+        end: start + EPS,
+        drag: true,
+        resize: false,
+        color: "rgba(244, 63, 94, 0.22)",
+      });
+      setLabelInfo({ mode: "B", t: start });
+      return;
+    }
+
+    setLabelInfo({ mode: "NONE" });
   }, [loopA, loopB, loopEnabled]);
 
+  const pct = (t: number) => labelStyle.pct(t);
+
   return (
-    <div className="w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+    <div ref={wrapRef} className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
       <div ref={containerRef} className="w-full" />
-      <p className="mt-2 text-xs text-zinc-500">A만 지정해도 파형에 즉시 표시됩니다. (A 마커 → B 지정 시 AB 구간으로 전환)</p>
+
+      {/* ✅ 라벨 오버레이 */}
+      {labelInfo.mode === "A" && (
+        <div
+          className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
+          style={{ left: `${pct(labelInfo.t)}%` }}>
+          A
+        </div>
+      )}
+
+      {labelInfo.mode === "B" && (
+        <div
+          className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
+          style={{ left: `${pct(labelInfo.t)}%` }}>
+          B
+        </div>
+      )}
+
+      {labelInfo.mode === "AB" && (
+        <>
+          <div
+            className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
+            style={{ left: `${pct(labelInfo.a)}%` }}>
+            A
+          </div>
+          <div
+            className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
+            style={{ left: `${pct(labelInfo.b)}%` }}>
+            B
+          </div>
+        </>
+      )}
+
+      <p className="mt-2 text-xs text-zinc-500">A/B 단독 선택도 파형에 즉시 표시됩니다. (A/B 라벨 포함)</p>
     </div>
   );
 }
