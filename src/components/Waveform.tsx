@@ -4,6 +4,7 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
+import Minimap from "wavesurfer.js/dist/plugins/minimap.esm.js";
 import { usePlayerStore } from "@/store/playerStore";
 
 const AB_REGION_ID = "ab_region";
@@ -11,11 +12,15 @@ const MARK_A_ID = "mark_a";
 const MARK_B_ID = "mark_b";
 const RB_TMP_ID = "rb_tmp";
 
+// ✅ 스냅 간격(0.01초)
+const SNAP_SEC = 0.01;
+
 type LabelInfo = { mode: "NONE" } | { mode: "A"; t: number } | { mode: "B"; t: number } | { mode: "AB"; a: number; b: number };
 
 export default function Waveform() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const minimapRef = useRef<HTMLDivElement | null>(null);
 
   const wsRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<ReturnType<typeof Regions.create> | null>(null);
@@ -24,7 +29,10 @@ export default function Waveform() {
   const loopGuardRef = useRef(false);
   const fadeRafRef = useRef<number | null>(null);
 
-  // 우클릭 드래그 상태
+  // ✅ region-updated에서 우리가 setOptions로 다시 보정할 때 무한루프 방지
+  const snapApplyingRef = useRef(false);
+
+  // ✅ 우클릭 드래그 상태
   const rbSelectingRef = useRef(false);
   const rbStartTimeRef = useRef(0);
   const rbLastTimeRef = useRef(0);
@@ -85,6 +93,22 @@ export default function Waveform() {
       }
     };
     fadeRafRef.current = requestAnimationFrame(step);
+  };
+
+  // ✅ 스냅 유틸
+  const snapTime = (t: number, dur: number) => {
+    const clamped = Math.min(dur, Math.max(0, t));
+    return Math.round(clamped / SNAP_SEC) * SNAP_SEC;
+  };
+
+  const setRegionTimes = (r: any, start: number, end: number) => {
+    // wavesurfer regions API 버전에 따라 setOptions/update 지원이 다를 수 있어 fallback 제공
+    if (typeof r?.setOptions === "function") r.setOptions({ start, end });
+    else if (typeof r?.update === "function") r.update({ start, end });
+    else {
+      r.start = start;
+      r.end = end;
+    }
   };
 
   // 라벨 위치(퍼센트)
@@ -159,6 +183,18 @@ export default function Waveform() {
     if (!containerRef.current) return;
 
     const regions = Regions.create();
+
+    const minimap =
+      minimapRef.current != null
+        ? Minimap.create({
+            container: minimapRef.current,
+            height: 44,
+            waveColor: "rgba(148, 163, 184, 0.55)",
+            progressColor: "rgba(59, 130, 246, 0.65)",
+            cursorColor: "rgba(15, 23, 42, 0.7)",
+          })
+        : null;
+
     const ws = WaveSurfer.create({
       container: containerRef.current,
       height: 150,
@@ -167,7 +203,7 @@ export default function Waveform() {
       dragToSeek: true, // 좌클릭: 탐색
       barWidth: 2,
       barGap: 2,
-      plugins: [regions],
+      plugins: minimap ? [regions, minimap] : [regions],
     });
 
     wsRef.current = ws;
@@ -181,9 +217,7 @@ export default function Waveform() {
       const st = usePlayerStore.getState();
       ws.setPlaybackRate(st.playbackRate);
       ws.setVolume(st.volume);
-
-      // ✅ 현재 zoom 적용
-      ws.zoom(st.zoomPps);
+      ws.zoom(st.zoomPps); // ✅ 현재 zoom 적용
     });
 
     ws.on("play", () => setPlaying(true));
@@ -260,16 +294,22 @@ export default function Waveform() {
       }
     });
 
-    // region-created 방어(혹시 생기면 제거 후 반영)
+    // region-created 방어(혹시 생기면 제거 후 반영) + ✅ 스냅
     regions.on("region-created", (r: any) => {
       if (r.id === AB_REGION_ID || r.id === MARK_A_ID || r.id === MARK_B_ID || r.id === RB_TMP_ID) return;
 
-      const start = Math.max(0, r.start ?? 0);
-      const end = Math.max(0, r.end ?? 0);
+      const dur = ws.getDuration() || 0;
+      const start0 = Math.max(0, r.start ?? 0);
+      const end0 = Math.max(0, r.end ?? 0);
 
       try {
         r.remove();
       } catch {}
+
+      if (end0 <= start0) return;
+
+      const start = snapTime(start0, dur);
+      const end = snapTime(end0, dur);
 
       if (end <= start) return;
 
@@ -280,31 +320,61 @@ export default function Waveform() {
       clearAllRegions();
     });
 
-    // AB/마커 드래그 업데이트
+    // ✅ AB/마커 드래그 업데이트 + 스냅(0.01s)
     regions.on("region-updated", (r: any) => {
       if (r.id === RB_TMP_ID) return;
+      if (snapApplyingRef.current) return;
 
-      const start = Math.max(0, r.start ?? 0);
-      const end = Math.max(0, r.end ?? 0);
-      if (end <= start) return;
+      const dur = ws.getDuration() || 0;
+      const EPS = 0.08;
 
+      // 마커(A/B)는 start만 스냅하고, end는 start+EPS 유지
+      if (r.id === MARK_A_ID || r.id === MARK_B_ID) {
+        const s0 = Math.max(0, r.start ?? 0);
+        const s = snapTime(s0, dur);
+        const e = Math.min(dur, s + EPS);
+
+        // region UI도 스냅 위치로 보정
+        if (Math.abs(s - s0) > 1e-6) {
+          snapApplyingRef.current = true;
+          setRegionTimes(r, s, e);
+          requestAnimationFrame(() => {
+            snapApplyingRef.current = false;
+          });
+        }
+
+        if (r.id === MARK_A_ID) {
+          setLoopA(s);
+          resetRepeatCount();
+        } else {
+          setLoopB(s);
+          resetRepeatCount();
+        }
+        return;
+      }
+
+      // AB는 start/end 각각 스냅
       if (r.id === AB_REGION_ID) {
-        setLoopRange(start, end);
+        const s0 = Math.max(0, r.start ?? 0);
+        const e0 = Math.max(0, r.end ?? 0);
+
+        const s = snapTime(s0, dur);
+        const e = snapTime(e0, dur);
+
+        if (e <= s) return;
+
+        // UI 보정
+        if (Math.abs(s - s0) > 1e-6 || Math.abs(e - e0) > 1e-6) {
+          snapApplyingRef.current = true;
+          setRegionTimes(r, s, e);
+          requestAnimationFrame(() => {
+            snapApplyingRef.current = false;
+          });
+        }
+
+        setLoopRange(s, e);
         setLoopEnabled(true);
         resetRepeatCount();
-        return;
-      }
-
-      if (r.id === MARK_A_ID) {
-        setLoopA(start);
-        resetRepeatCount();
-        return;
-      }
-
-      if (r.id === MARK_B_ID) {
-        setLoopB(start);
-        resetRepeatCount();
-        return;
       }
     });
 
@@ -377,14 +447,7 @@ export default function Waveform() {
       const tmp = rbTmpRegionRef.current;
       if (!tmp) return;
 
-      if (typeof tmp.setOptions === "function") {
-        tmp.setOptions({ start: a, end: b });
-      } else if (typeof tmp.update === "function") {
-        tmp.update({ start: a, end: b });
-      } else {
-        tmp.start = a;
-        tmp.end = b;
-      }
+      setRegionTimes(tmp, a, b);
     };
 
     const finishRightDrag = (e: PointerEvent) => {
@@ -400,25 +463,33 @@ export default function Waveform() {
         wrapperEl.releasePointerCapture(e.pointerId);
       } catch {}
 
-      const a = Math.min(rbStartTimeRef.current, rbLastTimeRef.current);
-      const b = Math.max(rbStartTimeRef.current, rbLastTimeRef.current);
+      const dur = ws.getDuration() || 0;
+
+      const a0 = Math.min(rbStartTimeRef.current, rbLastTimeRef.current);
+      const b0 = Math.max(rbStartTimeRef.current, rbLastTimeRef.current);
 
       try {
         rbTmpRegionRef.current?.remove?.();
       } catch {}
       rbTmpRegionRef.current = null;
 
-      if (b - a < 0.05) {
+      // 너무 짧으면(거의 클릭) 기존 표시 복구
+      if (b0 - a0 < 0.05) {
         const st = usePlayerStore.getState();
         redrawFromValues(st.loopA, st.loopB, st.loopEnabled);
         return;
       }
 
+      // ✅ 스냅 적용
+      const a = snapTime(a0, dur);
+      const b = snapTime(b0, dur);
+      if (b <= a) return;
+
       setLoopRange(a, b);
       setLoopEnabled(true);
       resetRepeatCount();
 
-      // ✅ 구간 설정 후 즉시 A로 이동(Play 누르면 A부터)
+      // ✅ 구간 설정 후 즉시 A로 이동
       usePlayerStore.getState().setTime(a);
     };
 
@@ -426,7 +497,6 @@ export default function Waveform() {
     // ✅ Ctrl/⌘ + Wheel Zoom
     // =========================
     const onWheel = (e: WheelEvent) => {
-      // ctrlKey(Win/Linux) 또는 metaKey(Mac) 누를 때만 줌
       if (!e.ctrlKey && !e.metaKey) return;
 
       const st = usePlayerStore.getState();
@@ -436,8 +506,6 @@ export default function Waveform() {
 
       // deltaY > 0 => 축소, deltaY < 0 => 확대
       const dir = e.deltaY > 0 ? -1 : 1;
-
-      // 현재 줌에 비례해서 변화량 조절(줌이 클수록 더 크게 움직여도 됨)
       const step = Math.max(10, Math.round(st.zoomPps * 0.08)); // 8%
       st.setZoomPps(st.zoomPps + dir * step);
     };
@@ -564,12 +632,22 @@ export default function Waveform() {
 
   return (
     <div ref={wrapRef} className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+      {/* ✅ Overview / Minimap */}
+      <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
+        <div className="mb-1 flex items-center justify-between">
+          <div className="text-xs font-medium text-zinc-700">Overview</div>
+          <div className="text-[11px] text-zinc-500">클릭/드래그로 이동 · 확대 시 뷰포트가 표시됩니다</div>
+        </div>
+        <div ref={minimapRef} className="w-full" />
+      </div>
+
+      {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
 
       {/* 라벨 오버레이 */}
       {labelInfo.mode === "A" && (
         <div
-          className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
+          className="pointer-events-none absolute top-[74px] -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
           style={{ left: `${pct(labelInfo.t)}%` }}>
           A
         </div>
@@ -577,7 +655,7 @@ export default function Waveform() {
 
       {labelInfo.mode === "B" && (
         <div
-          className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
+          className="pointer-events-none absolute top-[74px] -translate-x-1/2 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
           style={{ left: `${pct(labelInfo.t)}%` }}>
           B
         </div>
@@ -586,12 +664,12 @@ export default function Waveform() {
       {labelInfo.mode === "AB" && (
         <>
           <div
-            className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
+            className="pointer-events-none absolute top-[74px] -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
             style={{ left: `${pct(labelInfo.a)}%` }}>
             A
           </div>
           <div
-            className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
+            className="pointer-events-none absolute top-[74px] -translate-x-1/2 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
             style={{ left: `${pct(labelInfo.b)}%` }}>
             B
           </div>
@@ -599,7 +677,7 @@ export default function Waveform() {
       )}
 
       <p className="mt-2 text-xs text-zinc-500">
-        좌클릭 드래그: 탐색, <b>우클릭 드래그: A–B 구간 선택</b>, <b>Ctrl/⌘ + 휠: 줌</b>
+        좌클릭 드래그: 탐색, <b>우클릭 드래그: A–B 구간 선택</b>, <b>Ctrl/⌘ + 휠: 줌</b>, <b>스냅: 0.01s</b>
       </p>
     </div>
   );
