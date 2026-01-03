@@ -240,6 +240,10 @@ export default function Waveform() {
       const b0 = st.loopB;
       if (!st.loopEnabled || a0 == null || b0 == null) return;
 
+      // ✅ 핵심 버그 수정:
+      // seek(칩 클릭)으로 timeupdate가 발생해도, "재생 중이 아닐 때"는 반복 로직을 실행하지 않음
+      if (typeof ws.isPlaying === "function" && !ws.isPlaying()) return;
+
       const a = Math.min(a0, b0);
       const b = Math.max(a0, b0);
       if (b <= a) return;
@@ -640,7 +644,7 @@ export default function Waveform() {
       {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
 
-      {/* ✅ A/B 텍스트 (라벨 대신) + 클릭하면 seek */}
+      {/* A/B 텍스트 + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-3 text-zinc-700">
