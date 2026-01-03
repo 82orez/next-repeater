@@ -1,7 +1,7 @@
 // src/components/Waveform.tsx
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useMemo } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import Minimap from "wavesurfer.js/dist/plugins/minimap.esm.js";
@@ -14,6 +14,20 @@ const RB_TMP_ID = "rb_tmp";
 
 // ✅ 스냅 간격(0.01초)
 const SNAP_SEC = 0.01;
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+// ✅ 01:23.45 형태(centisecond=1/100s)
+function fmtTimeCS(sec: number) {
+  const s = Math.max(0, sec);
+  const totalCs = Math.round(s * 100); // centiseconds
+  const mm = Math.floor(totalCs / (60 * 100));
+  const ss = Math.floor((totalCs % (60 * 100)) / 100);
+  const cs = totalCs % 100;
+  return `${pad2(mm)}:${pad2(ss)}.${pad2(cs)}`;
+}
 
 export default function Waveform() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -55,6 +69,18 @@ export default function Waveform() {
   const loopEnabled = usePlayerStore((s) => s.loopEnabled);
   const loopA = usePlayerStore((s) => s.loopA);
   const loopB = usePlayerStore((s) => s.loopB);
+
+  // ✅ A/B 텍스트 표시용 (정렬된 값)
+  const abText = useMemo(() => {
+    if (loopA == null && loopB == null) return { a: null as number | null, b: null as number | null, len: null as number | null };
+    if (loopA != null && loopB == null) return { a: loopA, b: null, len: null };
+    if (loopA == null && loopB != null) return { a: null, b: loopB, len: null };
+
+    const a = Math.min(loopA!, loopB!);
+    const b = Math.max(loopA!, loopB!);
+    const len = b > a ? b - a : null;
+    return { a, b, len };
+  }, [loopA, loopB]);
 
   const clearAllRegions = () => {
     const regions = regionsRef.current;
@@ -457,7 +483,6 @@ export default function Waveform() {
       setLoopEnabled(true);
       resetRepeatCount();
 
-      // 구간 설정 후 즉시 A로 이동
       usePlayerStore.getState().setTime(a);
     };
 
@@ -603,9 +628,24 @@ export default function Waveform() {
       {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
 
-      <p className="mt-2 text-xs text-zinc-500">
-        좌클릭 드래그: 탐색, <b>우클릭 드래그: A–B 구간 선택</b>, <b>Ctrl/⌘ + 휠: 줌</b>, <b>스냅: 0.01s</b>
-      </p>
+      {/* ✅ A/B 텍스트 (라벨 대신) */}
+      <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-3 text-zinc-700">
+            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">
+              A {abText.a != null ? fmtTimeCS(abText.a) : "--:--.--"}
+            </span>
+            <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700">
+              B {abText.b != null ? fmtTimeCS(abText.b) : "--:--.--"}
+            </span>
+            {abText.len != null && <span className="rounded-full bg-blue-50 px-2 py-1 font-semibold text-blue-700">LEN {fmtTimeCS(abText.len)}</span>}
+          </div>
+
+          <div className="text-[11px] text-zinc-500">
+            좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · 스냅 0.01s
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
