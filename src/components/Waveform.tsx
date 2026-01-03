@@ -62,6 +62,8 @@ export default function Waveform() {
   const setLoopEnabled = usePlayerStore((s) => s.setLoopEnabled);
   const resetRepeatCount = usePlayerStore((s) => s.resetRepeatCount);
 
+  const setTime = usePlayerStore((s) => s.setTime); // ✅ 칩 클릭 시 seek
+
   const audioUrl = usePlayerStore((s) => s.audioUrl);
   const playbackRate = usePlayerStore((s) => s.playbackRate);
   const volume = usePlayerStore((s) => s.volume);
@@ -614,6 +616,16 @@ export default function Waveform() {
     }
   }, [loopA, loopB, loopEnabled]);
 
+  // ✅ 칩 클릭 시 seek 위치 결정(AB일 때는 min/max 사용)
+  const seekToA = () => {
+    if (abText.a == null) return;
+    setTime(abText.a);
+  };
+  const seekToB = () => {
+    if (abText.b == null) return;
+    setTime(abText.b);
+  };
+
   return (
     <div className="w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
       {/* Overview / Minimap */}
@@ -628,16 +640,28 @@ export default function Waveform() {
       {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
 
-      {/* ✅ A/B 텍스트 (라벨 대신) */}
+      {/* ✅ A/B 텍스트 (라벨 대신) + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-3 text-zinc-700">
-            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">
+            <button
+              type="button"
+              onClick={seekToA}
+              disabled={abText.a == null}
+              className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 hover:bg-amber-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              title={abText.a != null ? "A로 이동" : "A가 설정되지 않았습니다"}>
               A {abText.a != null ? fmtTimeCS(abText.a) : "--:--.--"}
-            </span>
-            <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700">
+            </button>
+
+            <button
+              type="button"
+              onClick={seekToB}
+              disabled={abText.b == null}
+              className="inline-flex items-center rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 hover:bg-rose-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              title={abText.b != null ? "B로 이동" : "B가 설정되지 않았습니다"}>
               B {abText.b != null ? fmtTimeCS(abText.b) : "--:--.--"}
-            </span>
+            </button>
+
             {abText.len != null && <span className="rounded-full bg-blue-50 px-2 py-1 font-semibold text-blue-700">LEN {fmtTimeCS(abText.len)}</span>}
           </div>
 
