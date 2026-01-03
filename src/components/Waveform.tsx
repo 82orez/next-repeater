@@ -24,10 +24,10 @@ export default function Waveform() {
   const loopGuardRef = useRef(false);
   const fadeRafRef = useRef<number | null>(null);
 
-  // ✅ 우클릭 드래그 상태
+  // 우클릭 드래그 상태
   const rbSelectingRef = useRef(false);
   const rbStartTimeRef = useRef(0);
-  const rbLastTimeRef = useRef(0); // ✅ pointerup 시 clientX 재계산 대신 마지막 move 시간 사용
+  const rbLastTimeRef = useRef(0);
   const rbTmpRegionRef = useRef<any | null>(null);
   const rbPointerIdRef = useRef<number | null>(null);
 
@@ -41,7 +41,7 @@ export default function Waveform() {
 
   const setLoopA = usePlayerStore((s) => s.setLoopA);
   const setLoopB = usePlayerStore((s) => s.setLoopB);
-  const setLoopRange = usePlayerStore((s) => s.setLoopRange); // ✅ NEW
+  const setLoopRange = usePlayerStore((s) => s.setLoopRange);
   const setLoopEnabled = usePlayerStore((s) => s.setLoopEnabled);
   const resetRepeatCount = usePlayerStore((s) => s.resetRepeatCount);
 
@@ -87,7 +87,7 @@ export default function Waveform() {
     fadeRafRef.current = requestAnimationFrame(step);
   };
 
-  // label 위치(퍼센트)
+  // 라벨 위치(퍼센트)
   const pct = useMemo(() => {
     const dur = wsRef.current?.getDuration?.() || 0;
     return (t: number) => {
@@ -181,6 +181,9 @@ export default function Waveform() {
       const st = usePlayerStore.getState();
       ws.setPlaybackRate(st.playbackRate);
       ws.setVolume(st.volume);
+
+      // ✅ 현재 zoom 적용
+      ws.zoom(st.zoomPps);
     });
 
     ws.on("play", () => setPlaying(true));
@@ -257,7 +260,7 @@ export default function Waveform() {
       }
     });
 
-    // region-created 방어(혹시 생성되면 제거 후 반영)
+    // region-created 방어(혹시 생기면 제거 후 반영)
     regions.on("region-created", (r: any) => {
       if (r.id === AB_REGION_ID || r.id === MARK_A_ID || r.id === MARK_B_ID || r.id === RB_TMP_ID) return;
 
@@ -270,7 +273,6 @@ export default function Waveform() {
 
       if (end <= start) return;
 
-      // ✅ 원자적 세팅
       setLoopRange(start, end);
       setLoopEnabled(true);
       resetRepeatCount();
@@ -287,7 +289,6 @@ export default function Waveform() {
       if (end <= start) return;
 
       if (r.id === AB_REGION_ID) {
-        // ✅ 원자적 세팅
         setLoopRange(start, end);
         setLoopEnabled(true);
         resetRepeatCount();
@@ -343,7 +344,6 @@ export default function Waveform() {
       rbStartTimeRef.current = t0;
       rbLastTimeRef.current = t0;
 
-      // 기존 표시 제거 후 임시 region만 표시(항상 1개)
       clearAllRegions();
       setLabelInfo({ mode: "NONE" });
 
@@ -400,7 +400,6 @@ export default function Waveform() {
         wrapperEl.releasePointerCapture(e.pointerId);
       } catch {}
 
-      // ✅ pointerup 위치로 다시 계산하지 않고 마지막 move 시간을 사용
       const a = Math.min(rbStartTimeRef.current, rbLastTimeRef.current);
       const b = Math.max(rbStartTimeRef.current, rbLastTimeRef.current);
 
@@ -409,20 +408,38 @@ export default function Waveform() {
       } catch {}
       rbTmpRegionRef.current = null;
 
-      // 너무 짧으면(거의 클릭) 기존 표시 복구
       if (b - a < 0.05) {
         const st = usePlayerStore.getState();
         redrawFromValues(st.loopA, st.loopB, st.loopEnabled);
         return;
       }
 
-      // ✅ (버그#2 해결) 원자적 범위 세팅
       setLoopRange(a, b);
       setLoopEnabled(true);
       resetRepeatCount();
 
-      // ✅ (버그#1 해결) 우클릭 드래그로 구간 잡으면 즉시 A로 이동
+      // ✅ 구간 설정 후 즉시 A로 이동(Play 누르면 A부터)
       usePlayerStore.getState().setTime(a);
+    };
+
+    // =========================
+    // ✅ Ctrl/⌘ + Wheel Zoom
+    // =========================
+    const onWheel = (e: WheelEvent) => {
+      // ctrlKey(Win/Linux) 또는 metaKey(Mac) 누를 때만 줌
+      if (!e.ctrlKey && !e.metaKey) return;
+
+      const st = usePlayerStore.getState();
+      if (!st.ws) return;
+
+      e.preventDefault();
+
+      // deltaY > 0 => 축소, deltaY < 0 => 확대
+      const dir = e.deltaY > 0 ? -1 : 1;
+
+      // 현재 줌에 비례해서 변화량 조절(줌이 클수록 더 크게 움직여도 됨)
+      const step = Math.max(10, Math.round(st.zoomPps * 0.08)); // 8%
+      st.setZoomPps(st.zoomPps + dir * step);
     };
 
     wrapperEl.addEventListener("contextmenu", onContextMenu);
@@ -430,6 +447,7 @@ export default function Waveform() {
     wrapperEl.addEventListener("pointermove", onPointerMove);
     wrapperEl.addEventListener("pointerup", finishRightDrag);
     wrapperEl.addEventListener("pointercancel", finishRightDrag);
+    wrapperEl.addEventListener("wheel", onWheel, { passive: false });
 
     return () => {
       cancelFade();
@@ -443,6 +461,7 @@ export default function Waveform() {
       wrapperEl.removeEventListener("pointermove", onPointerMove);
       wrapperEl.removeEventListener("pointerup", finishRightDrag);
       wrapperEl.removeEventListener("pointercancel", finishRightDrag);
+      wrapperEl.removeEventListener("wheel", onWheel as any);
 
       ws.destroy();
       wsRef.current = null;
@@ -485,8 +504,7 @@ export default function Waveform() {
     const ws = wsRef.current;
     if (!regions || !ws) return;
 
-    // 우클릭 선택 중에는 임시 region 유지
-    if (rbSelectingRef.current) return;
+    if (rbSelectingRef.current) return; // 우클릭 선택 중 임시 region 유지
 
     clearAllRegions();
 
@@ -581,7 +599,7 @@ export default function Waveform() {
       )}
 
       <p className="mt-2 text-xs text-zinc-500">
-        좌클릭 드래그: 탐색, <b>우클릭 드래그: A–B 구간 선택(선택 즉시 A로 이동)</b>
+        좌클릭 드래그: 탐색, <b>우클릭 드래그: A–B 구간 선택</b>, <b>Ctrl/⌘ + 휠: 줌</b>
       </p>
     </div>
   );

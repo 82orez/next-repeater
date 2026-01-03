@@ -34,8 +34,13 @@ type PlayerState = {
   isPlaying: boolean;
   duration: number;
   currentTime: number;
+
   playbackRate: number;
   volume: number;
+
+  // ✅ Zoom (pixels per second)
+  zoomPps: number;
+  setZoomPps: (pps: number) => void;
 
   loopEnabled: boolean;
   loopA: number | null;
@@ -60,10 +65,10 @@ type PlayerState = {
   setPlaybackRate: (r: number) => void;
   setVolume: (v: number) => void;
 
-  // ✅ NEW: A/B를 “한 번에” 세팅(원자적 업데이트)
+  // ✅ A/B를 “한 번에” 세팅(원자적 업데이트)
   setLoopRange: (a: number | null, b: number | null) => void;
 
-  // 기존 API 유지 (내부적으로 setLoopRange 사용)
+  // 기존 API 유지
   setLoopA: (t: number | null) => void;
   setLoopB: (t: number | null) => void;
 
@@ -107,8 +112,19 @@ export const usePlayerStore = create<PlayerState>()(
       isPlaying: false,
       duration: 0,
       currentTime: 0,
+
       playbackRate: 1,
       volume: 1,
+
+      // ✅ 기본 zoom
+      zoomPps: 80,
+
+      setZoomPps: (pps) => {
+        const v = Math.min(800, Math.max(20, Math.round(pps)));
+        set({ zoomPps: v });
+        const ws = get().ws;
+        if (ws) ws.zoom(v);
+      },
 
       loopEnabled: false,
       loopA: null,
@@ -156,7 +172,7 @@ export const usePlayerStore = create<PlayerState>()(
         if (ws) ws.setVolume(v);
       },
 
-      // ✅ NEW: 원자적으로 A/B 세팅 (이전 구간 섞이는 문제 방지)
+      // ✅ 원자적 A/B 세팅
       setLoopRange: (a, b) => {
         if (a == null && b == null) {
           set({ loopA: null, loopB: null });
@@ -168,11 +184,9 @@ export const usePlayerStore = create<PlayerState>()(
           set({ loopA: start, loopB: end });
           return;
         }
-        // 한쪽만 있는 경우
         set({ loopA: a ?? null, loopB: b ?? null });
       },
 
-      // 기존 API는 유지하되 내부적으로 setLoopRange 사용
       setLoopA: (loopA) => {
         const b = get().loopB;
         get().setLoopRange(loopA, b);
@@ -236,6 +250,7 @@ export const usePlayerStore = create<PlayerState>()(
       partialize: (s) => ({
         playbackRate: s.playbackRate,
         volume: s.volume,
+        zoomPps: s.zoomPps, // ✅ persist
         autoPauseMs: s.autoPauseMs,
         repeatTarget: s.repeatTarget,
         preRollSec: s.preRollSec,

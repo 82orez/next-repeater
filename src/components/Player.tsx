@@ -25,12 +25,21 @@ export default function Player() {
   const playbackRate = usePlayerStore((s) => s.playbackRate);
   const volume = usePlayerStore((s) => s.volume);
 
+  // ✅ Zoom
+  const zoomPps = usePlayerStore((s) => s.zoomPps);
+  const setZoomPps = usePlayerStore((s) => s.setZoomPps);
+
   const loopEnabled = usePlayerStore((s) => s.loopEnabled);
   const loopA = usePlayerStore((s) => s.loopA);
   const loopB = usePlayerStore((s) => s.loopB);
   const autoPauseMs = usePlayerStore((s) => s.autoPauseMs);
   const repeatTarget = usePlayerStore((s) => s.repeatTarget);
   const repeatCount = usePlayerStore((s) => s.repeatCount);
+
+  const preRollSec = usePlayerStore((s) => s.preRollSec);
+  const fadeMs = usePlayerStore((s) => s.fadeMs);
+  const setPreRollSec = usePlayerStore((s) => s.setPreRollSec);
+  const setFadeMs = usePlayerStore((s) => s.setFadeMs);
 
   const bookmarks = usePlayerStore((s) => s.bookmarks);
 
@@ -53,7 +62,6 @@ export default function Player() {
   const upsertRecent = usePlayerStore((s) => s.upsertRecent);
   const updateRecentTime = usePlayerStore((s) => s.updateRecentTime);
 
-  // 파일 업로드
   const onPickFile = () => fileInputRef.current?.click();
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,17 +72,17 @@ export default function Player() {
     upsertRecent({ fileName: f.name, audioUrl: url, lastTime: 0 });
   };
 
-  // loop label
   const loopLabel = useMemo(() => {
-    if (loopA == null || loopB == null) return "A–B 미설정";
-    const a = Math.min(loopA, loopB);
-    const b = Math.max(loopA, loopB);
+    if (loopA == null && loopB == null) return "A/B 미설정";
+    if (loopA != null && loopB == null) return `A: ${fmtTime(loopA)} (B 미설정)`;
+    if (loopA == null && loopB != null) return `B: ${fmtTime(loopB)} (A 미설정)`;
+    const a = Math.min(loopA!, loopB!);
+    const b = Math.max(loopA!, loopB!);
     return `${fmtTime(a)} → ${fmtTime(b)} (${fmtTime(b - a)})`;
   }, [loopA, loopB]);
 
   const canLoop = loopA != null && loopB != null && Math.abs(loopB - loopA) > 0.05;
 
-  // phrase list from bookmarks(REGION)
   const phrases = useMemo(() => {
     return bookmarks
       .filter((b) => b.type === "REGION" && typeof b.start === "number" && typeof b.end === "number" && b.end > b.start)
@@ -85,7 +93,6 @@ export default function Player() {
   const goPrevPhrase = () => {
     if (!phrases.length) return;
     const t = currentTime;
-    // 현재 시간보다 "시작이 작은" phrase 중 가장 가까운 것
     const prev = [...phrases].reverse().find((p) => p.start < t - 0.05) ?? phrases[phrases.length - 1];
     setLoopA(prev.start);
     setLoopB(prev.end);
@@ -105,20 +112,33 @@ export default function Player() {
     setTime(next.start);
   };
 
-  // 최근 재생 위치 저장(5초마다)
   useEffect(() => {
     if (!audioUrl) return;
-    const id = window.setInterval(() => {
-      updateRecentTime(audioUrl, currentTime);
-    }, 5000);
+    const id = window.setInterval(() => updateRecentTime(audioUrl, currentTime), 5000);
     return () => window.clearInterval(id);
   }, [audioUrl, currentTime, updateRecentTime]);
 
-  // 단축키
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       const tag = (ev.target as any)?.tagName?.toLowerCase?.();
       if (tag === "input" || tag === "textarea" || (ev.target as any)?.isContentEditable) return;
+
+      // Zoom shortcuts: Ctrl/⌘ + (+/-/0)
+      if ((ev.ctrlKey || ev.metaKey) && (ev.key === "+" || ev.key === "=")) {
+        ev.preventDefault();
+        setZoomPps(zoomPps + 20);
+        return;
+      }
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === "-") {
+        ev.preventDefault();
+        setZoomPps(zoomPps - 20);
+        return;
+      }
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === "0") {
+        ev.preventDefault();
+        setZoomPps(80);
+        return;
+      }
 
       if (ev.code === "Space") {
         ev.preventDefault();
@@ -169,21 +189,32 @@ export default function Player() {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [audioUrl, currentTime, loopEnabled, playbackRate, playPause, seekBy, setLoopA, setLoopB, setLoopEnabled, resetRepeatCount, setPlaybackRate]);
+  }, [
+    audioUrl,
+    currentTime,
+    loopEnabled,
+    playbackRate,
+    playPause,
+    seekBy,
+    setLoopA,
+    setLoopB,
+    setLoopEnabled,
+    resetRepeatCount,
+    setPlaybackRate,
+    zoomPps,
+    setZoomPps,
+  ]);
 
-  // wavesurfer 이벤트로 store의 isPlaying이 업데이트되지만,
-  // ws가 존재하는지 UI에서 확인도 해주면 UX가 좋아짐.
   const controlsDisabled = !audioUrl || !ws;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Repeat Player</h1>
-        <p className="mt-2 text-sm text-zinc-600">파형에서 구간 선택 → A–B 반복 → 속도 조절로 쉐도잉/리스닝을 빠르게.</p>
+        <p className="mt-2 text-sm text-zinc-600">Zoom + Ctrl/⌘+휠 줌으로 긴 오디오도 정밀하게 A–B 구간을 설정할 수 있어요.</p>
       </header>
 
       <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-5 shadow-sm">
-        {/* Top bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <div className="text-sm text-zinc-500">현재 파일</div>
@@ -195,6 +226,7 @@ export default function Player() {
 
           <div className="flex flex-wrap items-center gap-2">
             <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFileChange} />
+
             <button
               onClick={onPickFile}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
@@ -226,7 +258,7 @@ export default function Player() {
           </div>
         </div>
 
-        {/* Seek bar */}
+        {/* Seek */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between text-xs text-zinc-500">
             <span>{fmtTime(currentTime)}</span>
@@ -262,15 +294,14 @@ export default function Player() {
             <button
               onClick={goPrevPhrase}
               disabled={!phrases.length || controlsDisabled}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="이전 Phrase">
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
               <ChevronLeft className="h-4 w-4" /> 이전 Phrase
             </button>
+
             <button
               onClick={goNextPhrase}
               disabled={!phrases.length || controlsDisabled}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="다음 Phrase">
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
               다음 Phrase <ChevronRight className="h-4 w-4" />
             </button>
 
@@ -290,6 +321,59 @@ export default function Player() {
                 disabled={!ws}
               />
             </div>
+          </div>
+        </div>
+
+        {/* ✅ Zoom */}
+        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-zinc-900">Wave Zoom</div>
+              <div className="mt-1 text-xs text-zinc-500">
+                <b>Ctrl/⌘ + 휠</b>로도 줌이 됩니다. (⌘/Ctrl +/−/0 단축키 지원)
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setZoomPps(zoomPps - 20)}
+                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50"
+                disabled={!ws}>
+                −
+              </button>
+
+              <div className="min-w-[80px] text-center text-sm font-medium text-zinc-900">{zoomPps} pps</div>
+
+              <button
+                onClick={() => setZoomPps(zoomPps + 20)}
+                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50"
+                disabled={!ws}>
+                +
+              </button>
+
+              <button
+                onClick={() => setZoomPps(80)}
+                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
+                disabled={!ws}
+                title="Ctrl/⌘ + 0">
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <span className="w-10 text-xs text-zinc-500">20</span>
+            <input
+              type="range"
+              min={20}
+              max={800}
+              step={10}
+              value={zoomPps}
+              onChange={(e) => setZoomPps(Number(e.target.value))}
+              className="w-full"
+              disabled={!ws}
+            />
+            <span className="w-10 text-right text-xs text-zinc-500">800</span>
           </div>
         </div>
 
@@ -368,10 +452,10 @@ export default function Player() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <label className="block">
                 <div className="flex items-center gap-2 text-xs font-medium text-zinc-600">
-                  <Timer className="h-4 w-4" /> 반복 사이 자동 Pause (ms)
+                  <Timer className="h-4 w-4" /> Auto Pause (ms)
                 </div>
                 <input
                   type="number"
@@ -384,7 +468,7 @@ export default function Player() {
               </label>
 
               <label className="block">
-                <div className="text-xs font-medium text-zinc-600">반복 횟수 제한 (0=무제한)</div>
+                <div className="text-xs font-medium text-zinc-600">Repeat Limit</div>
                 <input
                   type="number"
                   min={0}
@@ -393,26 +477,35 @@ export default function Player() {
                   onChange={(e) => setRepeatTarget(clamp(Number(e.target.value || 0), 0, 999))}
                   className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
                 />
-                <div className="mt-1 text-xs text-zinc-500">현재 반복: {repeatCount}</div>
               </label>
-            </div>
 
-            <div className="mt-5 rounded-2xl bg-zinc-50 p-3 text-xs text-zinc-600">
-              <div className="font-medium text-zinc-800">단축키</div>
-              <ul className="mt-2 list-disc pl-5">
-                <li>
-                  <b>Space</b>: 재생/일시정지
-                </li>
-                <li>
-                  <b>←/→</b>: 3초 이동, <b>Shift+←/→</b>: 10초 이동
-                </li>
-                <li>
-                  <b>A</b>: A 지정, <b>B</b>: B 지정, <b>L</b>: 반복 토글
-                </li>
-                <li>
-                  <b>↑/↓</b>: 속도 ±0.05
-                </li>
-              </ul>
+              <label className="block">
+                <div className="text-xs font-medium text-zinc-600">Pre-roll (sec)</div>
+                <input
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  value={preRollSec}
+                  onChange={(e) => setPreRollSec(Number(e.target.value || 0))}
+                  className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                />
+                <div className="mt-1 text-[11px] text-zinc-500">0.10~0.25 추천</div>
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-zinc-600">Fade (ms)</div>
+                <input
+                  type="number"
+                  min={0}
+                  max={800}
+                  step={10}
+                  value={fadeMs}
+                  onChange={(e) => setFadeMs(Number(e.target.value || 0))}
+                  className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                />
+                <div className="mt-1 text-[11px] text-zinc-500">80~180ms 추천</div>
+              </label>
             </div>
           </div>
 
@@ -458,19 +551,35 @@ export default function Player() {
             </div>
 
             <div className="mt-6 rounded-2xl bg-zinc-50 p-3 text-xs text-zinc-600">
-              <div className="font-medium text-zinc-800">Phrase 개수</div>
-              <div className="mt-1">{phrases.length}개 (북마크에서 Phrase 저장 시 추가)</div>
+              <div className="font-medium text-zinc-800">단축키</div>
+              <ul className="mt-2 list-disc pl-5">
+                <li>
+                  <b>Space</b>: 재생/일시정지
+                </li>
+                <li>
+                  <b>←/→</b>: 3초 이동, <b>Shift+←/→</b>: 10초 이동
+                </li>
+                <li>
+                  <b>A</b>: A 지정, <b>B</b>: B 지정, <b>L</b>: 반복 토글
+                </li>
+                <li>
+                  <b>↑/↓</b>: 속도 ±0.05
+                </li>
+                <li>
+                  <b>Ctrl/⌘ + 휠</b>: 줌, <b>Ctrl/⌘ +/−/0</b>: 줌 조절/리셋
+                </li>
+              </ul>
             </div>
           </div>
         </div>
 
-        {/* Bookmark panel */}
+        {/* Bookmark */}
         <div className="mt-6">
           <BookmarkPanel />
         </div>
       </div>
 
-      <footer className="mt-8 text-center text-xs text-zinc-500">Repeat Player v2 — A–B 반복 / 파형 / 속도 / 북마크 / Phrase 이동</footer>
+      <footer className="mt-8 text-center text-xs text-zinc-500">Repeat Player v3 — Zoom + Ctrl/⌘+Wheel Zoom</footer>
     </div>
   );
 }
