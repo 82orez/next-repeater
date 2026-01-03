@@ -133,6 +133,27 @@ export default function Waveform() {
     }
   };
 
+  // ✅ ESC로 구간 초기화(스토어 + UI)
+  const resetLoopAll = () => {
+    // 우클릭 드래그 중이면 임시 선택도 제거
+    rbSelectingRef.current = false;
+    rbPointerIdRef.current = null;
+
+    try {
+      rbTmpRegionRef.current?.remove?.();
+    } catch {}
+    rbTmpRegionRef.current = null;
+
+    // UI regions 제거
+    clearAllRegions();
+
+    // store 값 초기화
+    setLoopEnabled(false);
+    setLoopA(null);
+    setLoopB(null);
+    resetRepeatCount();
+  };
+
   // store 값으로 다시 그리기(우클릭 선택 취소 시 복구)
   const redrawFromValues = (a0: number | null, b0: number | null, enabled: boolean) => {
     const regions = regionsRef.current;
@@ -240,8 +261,7 @@ export default function Waveform() {
       const b0 = st.loopB;
       if (!st.loopEnabled || a0 == null || b0 == null) return;
 
-      // ✅ 핵심 버그 수정:
-      // seek(칩 클릭)으로 timeupdate가 발생해도, "재생 중이 아닐 때"는 반복 로직을 실행하지 않음
+      // ✅ seek(칩 클릭 등)로 timeupdate가 발생해도, "재생 중이 아닐 때"는 반복 로직을 실행하지 않음
       if (typeof ws.isPlaying === "function" && !ws.isPlaying()) return;
 
       const a = Math.min(a0, b0);
@@ -506,12 +526,33 @@ export default function Waveform() {
       st.setZoomPps(st.zoomPps + dir * step);
     };
 
+    // ✅ ESC 키로 구간 초기화
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+
+      // 입력 중 ESC는 사용자가 의도적으로 쓸 수도 있으니 방해하지 않음
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const isTypingTarget = tag === "input" || tag === "textarea" || tag === "select" || (target as any)?.isContentEditable;
+
+      if (isTypingTarget) return;
+
+      const st = usePlayerStore.getState();
+      const hasLoop = st.loopA != null || st.loopB != null || st.loopEnabled;
+
+      if (!hasLoop && !rbSelectingRef.current) return;
+
+      e.preventDefault();
+      resetLoopAll();
+    };
+
     wrapperEl.addEventListener("contextmenu", onContextMenu);
     wrapperEl.addEventListener("pointerdown", onPointerDown);
     wrapperEl.addEventListener("pointermove", onPointerMove);
     wrapperEl.addEventListener("pointerup", finishRightDrag);
     wrapperEl.addEventListener("pointercancel", finishRightDrag);
     wrapperEl.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("keydown", onKeyDown);
 
     return () => {
       cancelFade();
@@ -526,6 +567,7 @@ export default function Waveform() {
       wrapperEl.removeEventListener("pointerup", finishRightDrag);
       wrapperEl.removeEventListener("pointercancel", finishRightDrag);
       wrapperEl.removeEventListener("wheel", onWheel as any);
+      window.removeEventListener("keydown", onKeyDown);
 
       ws.destroy();
       wsRef.current = null;
@@ -670,7 +712,7 @@ export default function Waveform() {
           </div>
 
           <div className="text-[11px] text-zinc-500">
-            좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · 스냅 0.01s
+            좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간 초기화 · 스냅 0.01s
           </div>
         </div>
       </div>
