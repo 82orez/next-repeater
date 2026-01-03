@@ -1,7 +1,7 @@
 // src/components/Waveform.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import { usePlayerStore } from "@/store/playerStore";
@@ -9,6 +9,7 @@ import { usePlayerStore } from "@/store/playerStore";
 const AB_REGION_ID = "ab_region";
 const MARK_A_ID = "mark_a";
 const MARK_B_ID = "mark_b";
+const RB_TMP_ID = "rb_tmp";
 
 type LabelInfo = { mode: "NONE" } | { mode: "A"; t: number } | { mode: "B"; t: number } | { mode: "AB"; a: number; b: number };
 
@@ -23,6 +24,13 @@ export default function Waveform() {
   const loopGuardRef = useRef(false);
   const fadeRafRef = useRef<number | null>(null);
 
+  // ✅ 우클릭 드래그 상태
+  const rbSelectingRef = useRef(false);
+  const rbStartTimeRef = useRef(0);
+  const rbLastTimeRef = useRef(0); // ✅ pointerup 시 clientX 재계산 대신 마지막 move 시간 사용
+  const rbTmpRegionRef = useRef<any | null>(null);
+  const rbPointerIdRef = useRef<number | null>(null);
+
   const [labelInfo, setLabelInfo] = useState<LabelInfo>({ mode: "NONE" });
 
   const setWs = usePlayerStore((s) => s.setWs);
@@ -33,6 +41,7 @@ export default function Waveform() {
 
   const setLoopA = usePlayerStore((s) => s.setLoopA);
   const setLoopB = usePlayerStore((s) => s.setLoopB);
+  const setLoopRange = usePlayerStore((s) => s.setLoopRange); // ✅ NEW
   const setLoopEnabled = usePlayerStore((s) => s.setLoopEnabled);
   const resetRepeatCount = usePlayerStore((s) => s.resetRepeatCount);
 
@@ -78,16 +87,73 @@ export default function Waveform() {
     fadeRafRef.current = requestAnimationFrame(step);
   };
 
-  // label 위치 계산(퍼센트)
-  const labelStyle = useMemo(() => {
-    const ws = wsRef.current;
-    const dur = ws?.getDuration?.() || 0;
-    const pct = (t: number) => {
+  // label 위치(퍼센트)
+  const pct = useMemo(() => {
+    const dur = wsRef.current?.getDuration?.() || 0;
+    return (t: number) => {
       if (!dur || dur <= 0) return 0;
       return Math.min(100, Math.max(0, (t / dur) * 100));
     };
-    return { pct };
   }, [audioUrl, loopA, loopB, labelInfo.mode]);
+
+  // store 값으로 다시 그리기(우클릭 선택 취소 시 복구)
+  const redrawFromValues = (a0: number | null, b0: number | null, enabled: boolean) => {
+    const regions = regionsRef.current;
+    const ws = wsRef.current;
+    if (!regions || !ws) return;
+
+    clearAllRegions();
+
+    const dur = ws.getDuration() || 0;
+    const EPS = 0.08;
+
+    if (a0 != null && b0 != null) {
+      const a = Math.min(a0, b0);
+      const b = Math.max(a0, b0);
+      if (b > a) {
+        regions.addRegion({
+          id: AB_REGION_ID,
+          start: a,
+          end: b,
+          drag: true,
+          resize: true,
+          color: enabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
+        });
+        setLabelInfo({ mode: "AB", a, b });
+        return;
+      }
+    }
+
+    if (a0 != null && b0 == null) {
+      const start = dur > 0 ? Math.min(a0, Math.max(0, dur - EPS)) : a0;
+      regions.addRegion({
+        id: MARK_A_ID,
+        start,
+        end: start + EPS,
+        drag: true,
+        resize: false,
+        color: "rgba(245, 158, 11, 0.22)",
+      });
+      setLabelInfo({ mode: "A", t: start });
+      return;
+    }
+
+    if (a0 == null && b0 != null) {
+      const start = dur > 0 ? Math.min(b0, Math.max(0, dur - EPS)) : b0;
+      regions.addRegion({
+        id: MARK_B_ID,
+        start,
+        end: start + EPS,
+        drag: true,
+        resize: false,
+        color: "rgba(244, 63, 94, 0.22)",
+      });
+      setLabelInfo({ mode: "B", t: start });
+      return;
+    }
+
+    setLabelInfo({ mode: "NONE" });
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -98,7 +164,7 @@ export default function Waveform() {
       height: 150,
       normalize: true,
       cursorWidth: 1,
-      dragToSeek: true,
+      dragToSeek: true, // 좌클릭: 탐색
       barWidth: 2,
       barGap: 2,
       plugins: [regions],
@@ -107,10 +173,6 @@ export default function Waveform() {
     wsRef.current = ws;
     regionsRef.current = regions;
     setWs(ws);
-
-    const disableDrag = regions.enableDragSelection({
-      color: "rgba(59, 130, 246, 0.18)",
-    });
 
     ws.on("ready", () => {
       setReady(true);
@@ -125,6 +187,7 @@ export default function Waveform() {
     ws.on("pause", () => setPlaying(false));
     ws.on("finish", () => setPlaying(false));
 
+    // timeupdate: A–B 반복 처리
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
 
@@ -183,8 +246,7 @@ export default function Waveform() {
         };
 
         if (fadeMs > 0) {
-          const from = targetVol;
-          rampVolume(from, 0, fadeMs, () => {
+          rampVolume(targetVol, 0, fadeMs, () => {
             ws.pause();
             afterPause();
           });
@@ -195,9 +257,9 @@ export default function Waveform() {
       }
     });
 
-    // drag region -> store 반영 후 삭제 (항상 region 1개)
+    // region-created 방어(혹시 생성되면 제거 후 반영)
     regions.on("region-created", (r: any) => {
-      if (r.id === AB_REGION_ID || r.id === MARK_A_ID || r.id === MARK_B_ID) return;
+      if (r.id === AB_REGION_ID || r.id === MARK_A_ID || r.id === MARK_B_ID || r.id === RB_TMP_ID) return;
 
       const start = Math.max(0, r.start ?? 0);
       const end = Math.max(0, r.end ?? 0);
@@ -208,23 +270,25 @@ export default function Waveform() {
 
       if (end <= start) return;
 
-      setLoopA(start);
-      setLoopB(end);
+      // ✅ 원자적 세팅
+      setLoopRange(start, end);
       setLoopEnabled(true);
       resetRepeatCount();
 
       clearAllRegions();
     });
 
-    // region drag/resize
+    // AB/마커 드래그 업데이트
     regions.on("region-updated", (r: any) => {
+      if (r.id === RB_TMP_ID) return;
+
       const start = Math.max(0, r.start ?? 0);
       const end = Math.max(0, r.end ?? 0);
       if (end <= start) return;
 
       if (r.id === AB_REGION_ID) {
-        setLoopA(start);
-        setLoopB(end);
+        // ✅ 원자적 세팅
+        setLoopRange(start, end);
         setLoopEnabled(true);
         resetRepeatCount();
         return;
@@ -243,15 +307,142 @@ export default function Waveform() {
       }
     });
 
+    // =========================
+    // ✅ 우클릭 드래그(A–B 선택)
+    // =========================
+    const wrapperEl: HTMLElement = ((ws as any).getWrapper?.() as HTMLElement) || containerRef.current!;
+
+    const xToTime = (clientX: number) => {
+      const rect = wrapperEl.getBoundingClientRect();
+      const ratio = (clientX - rect.left) / Math.max(1, rect.width);
+      const dur = ws.getDuration() || 0;
+      const clamped = Math.min(1, Math.max(0, ratio));
+      return clamped * dur;
+    };
+
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 2) return;
+
+      const dur = ws.getDuration() || 0;
+      if (dur <= 0) return;
+
+      e.preventDefault();
+
+      rbSelectingRef.current = true;
+      rbPointerIdRef.current = e.pointerId;
+
+      try {
+        wrapperEl.setPointerCapture(e.pointerId);
+      } catch {}
+
+      const t0 = xToTime(e.clientX);
+      rbStartTimeRef.current = t0;
+      rbLastTimeRef.current = t0;
+
+      // 기존 표시 제거 후 임시 region만 표시(항상 1개)
+      clearAllRegions();
+      setLabelInfo({ mode: "NONE" });
+
+      const t1 = Math.min(dur, t0 + 0.01);
+      const tmp = regions.addRegion({
+        id: RB_TMP_ID,
+        start: t0,
+        end: t1,
+        drag: false,
+        resize: false,
+        color: "rgba(168, 85, 247, 0.18)",
+      });
+      rbTmpRegionRef.current = tmp;
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!rbSelectingRef.current) return;
+      if (rbPointerIdRef.current !== e.pointerId) return;
+
+      e.preventDefault();
+
+      const dur = ws.getDuration() || 0;
+      if (dur <= 0) return;
+
+      const t = xToTime(e.clientX);
+      rbLastTimeRef.current = t;
+
+      const a = Math.min(rbStartTimeRef.current, t);
+      const b = Math.max(rbStartTimeRef.current, t);
+
+      const tmp = rbTmpRegionRef.current;
+      if (!tmp) return;
+
+      if (typeof tmp.setOptions === "function") {
+        tmp.setOptions({ start: a, end: b });
+      } else if (typeof tmp.update === "function") {
+        tmp.update({ start: a, end: b });
+      } else {
+        tmp.start = a;
+        tmp.end = b;
+      }
+    };
+
+    const finishRightDrag = (e: PointerEvent) => {
+      if (!rbSelectingRef.current) return;
+      if (rbPointerIdRef.current !== e.pointerId) return;
+
+      e.preventDefault();
+
+      rbSelectingRef.current = false;
+      rbPointerIdRef.current = null;
+
+      try {
+        wrapperEl.releasePointerCapture(e.pointerId);
+      } catch {}
+
+      // ✅ pointerup 위치로 다시 계산하지 않고 마지막 move 시간을 사용
+      const a = Math.min(rbStartTimeRef.current, rbLastTimeRef.current);
+      const b = Math.max(rbStartTimeRef.current, rbLastTimeRef.current);
+
+      try {
+        rbTmpRegionRef.current?.remove?.();
+      } catch {}
+      rbTmpRegionRef.current = null;
+
+      // 너무 짧으면(거의 클릭) 기존 표시 복구
+      if (b - a < 0.05) {
+        const st = usePlayerStore.getState();
+        redrawFromValues(st.loopA, st.loopB, st.loopEnabled);
+        return;
+      }
+
+      // ✅ (버그#2 해결) 원자적 범위 세팅
+      setLoopRange(a, b);
+      setLoopEnabled(true);
+      resetRepeatCount();
+
+      // ✅ (버그#1 해결) 우클릭 드래그로 구간 잡으면 즉시 A로 이동
+      usePlayerStore.getState().setTime(a);
+    };
+
+    wrapperEl.addEventListener("contextmenu", onContextMenu);
+    wrapperEl.addEventListener("pointerdown", onPointerDown);
+    wrapperEl.addEventListener("pointermove", onPointerMove);
+    wrapperEl.addEventListener("pointerup", finishRightDrag);
+    wrapperEl.addEventListener("pointercancel", finishRightDrag);
+
     return () => {
       cancelFade();
       if (loopTimerRef.current) {
         window.clearTimeout(loopTimerRef.current);
         loopTimerRef.current = null;
       }
-      try {
-        disableDrag?.();
-      } catch {}
+
+      wrapperEl.removeEventListener("contextmenu", onContextMenu);
+      wrapperEl.removeEventListener("pointerdown", onPointerDown);
+      wrapperEl.removeEventListener("pointermove", onPointerMove);
+      wrapperEl.removeEventListener("pointerup", finishRightDrag);
+      wrapperEl.removeEventListener("pointercancel", finishRightDrag);
 
       ws.destroy();
       wsRef.current = null;
@@ -280,7 +471,6 @@ export default function Waveform() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
-  // rate / volume sync
   useEffect(() => {
     wsRef.current?.setPlaybackRate(playbackRate);
   }, [playbackRate]);
@@ -289,12 +479,14 @@ export default function Waveform() {
     wsRef.current?.setVolume(volume);
   }, [volume]);
 
-  // ✅ 파형 표시 region은 1개만 (A마커 / B마커 / AB구간)
-  // + 라벨 정보(labelInfo)도 같이 업데이트
+  // ✅ region 1개 유지(A마커/B마커/AB구간)
   useEffect(() => {
     const regions = regionsRef.current;
     const ws = wsRef.current;
     if (!regions || !ws) return;
+
+    // 우클릭 선택 중에는 임시 region 유지
+    if (rbSelectingRef.current) return;
 
     clearAllRegions();
 
@@ -304,7 +496,6 @@ export default function Waveform() {
     const dur = ws.getDuration() || 0;
     const EPS = 0.08;
 
-    // AB 유효 -> AB 표시
     if (a0 != null && b0 != null) {
       const a = Math.min(a0, b0);
       const b = Math.max(a0, b0);
@@ -322,7 +513,6 @@ export default function Waveform() {
       }
     }
 
-    // A만 -> A 마커
     if (a0 != null && b0 == null) {
       const start = dur > 0 ? Math.min(a0, Math.max(0, dur - EPS)) : a0;
       regions.addRegion({
@@ -337,7 +527,6 @@ export default function Waveform() {
       return;
     }
 
-    // ✅ B만 -> B 마커
     if (a0 == null && b0 != null) {
       const start = dur > 0 ? Math.min(b0, Math.max(0, dur - EPS)) : b0;
       regions.addRegion({
@@ -355,13 +544,11 @@ export default function Waveform() {
     setLabelInfo({ mode: "NONE" });
   }, [loopA, loopB, loopEnabled]);
 
-  const pct = (t: number) => labelStyle.pct(t);
-
   return (
     <div ref={wrapRef} className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
       <div ref={containerRef} className="w-full" />
 
-      {/* ✅ 라벨 오버레이 */}
+      {/* 라벨 오버레이 */}
       {labelInfo.mode === "A" && (
         <div
           className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
@@ -393,7 +580,9 @@ export default function Waveform() {
         </>
       )}
 
-      <p className="mt-2 text-xs text-zinc-500">A/B 단독 선택도 파형에 즉시 표시됩니다. (A/B 라벨 포함)</p>
+      <p className="mt-2 text-xs text-zinc-500">
+        좌클릭 드래그: 탐색, <b>우클릭 드래그: A–B 구간 선택(선택 즉시 A로 이동)</b>
+      </p>
     </div>
   );
 }

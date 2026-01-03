@@ -45,9 +45,8 @@ type PlayerState = {
   repeatTarget: number;
   repeatCount: number;
 
-  // ✅ 추가: 경계 부드럽게
-  preRollSec: number; // 0~2초 추천
-  fadeMs: number; // 0~800ms 추천
+  preRollSec: number;
+  fadeMs: number;
 
   bookmarks: Bookmark[];
   recent: RecentItem[];
@@ -61,7 +60,10 @@ type PlayerState = {
   setPlaybackRate: (r: number) => void;
   setVolume: (v: number) => void;
 
-  // ✅ A/B 자동 정렬 포함
+  // ✅ NEW: A/B를 “한 번에” 세팅(원자적 업데이트)
+  setLoopRange: (a: number | null, b: number | null) => void;
+
+  // 기존 API 유지 (내부적으로 setLoopRange 사용)
   setLoopA: (t: number | null) => void;
   setLoopB: (t: number | null) => void;
 
@@ -71,7 +73,6 @@ type PlayerState = {
   incRepeatCount: () => void;
   resetRepeatCount: () => void;
 
-  // ✅ 추가 설정
   setPreRollSec: (sec: number) => void;
   setFadeMs: (ms: number) => void;
 
@@ -117,7 +118,6 @@ export const usePlayerStore = create<PlayerState>()(
       repeatTarget: 0,
       repeatCount: 0,
 
-      // ✅ 기본값 추천
       preRollSec: 0.15,
       fadeMs: 120,
 
@@ -156,19 +156,31 @@ export const usePlayerStore = create<PlayerState>()(
         if (ws) ws.setVolume(v);
       },
 
-      // ✅ 핵심: A/B 자동 정렬(스왑)
+      // ✅ NEW: 원자적으로 A/B 세팅 (이전 구간 섞이는 문제 방지)
+      setLoopRange: (a, b) => {
+        if (a == null && b == null) {
+          set({ loopA: null, loopB: null });
+          return;
+        }
+        if (a != null && b != null) {
+          const start = Math.min(a, b);
+          const end = Math.max(a, b);
+          set({ loopA: start, loopB: end });
+          return;
+        }
+        // 한쪽만 있는 경우
+        set({ loopA: a ?? null, loopB: b ?? null });
+      },
+
+      // 기존 API는 유지하되 내부적으로 setLoopRange 사용
       setLoopA: (loopA) => {
         const b = get().loopB;
-        if (loopA == null) return set({ loopA: null });
-        if (b != null && loopA > b) return set({ loopA: b, loopB: loopA });
-        return set({ loopA });
+        get().setLoopRange(loopA, b);
       },
 
       setLoopB: (loopB) => {
         const a = get().loopA;
-        if (loopB == null) return set({ loopB: null });
-        if (a != null && loopB < a) return set({ loopA: loopB, loopB: a });
-        return set({ loopB });
+        get().setLoopRange(a, loopB);
       },
 
       setLoopEnabled: (loopEnabled) => set({ loopEnabled }),
@@ -177,7 +189,6 @@ export const usePlayerStore = create<PlayerState>()(
       incRepeatCount: () => set({ repeatCount: get().repeatCount + 1 }),
       resetRepeatCount: () => set({ repeatCount: 0 }),
 
-      // ✅ 추가 설정
       setPreRollSec: (sec) => set({ preRollSec: Math.min(2, Math.max(0, sec)) }),
       setFadeMs: (ms) => set({ fadeMs: Math.min(800, Math.max(0, ms)) }),
 
@@ -192,6 +203,7 @@ export const usePlayerStore = create<PlayerState>()(
         ].slice(0, 10);
         set({ recent: next });
       },
+
       updateRecentTime: (audioUrl, lastTime) => set({ recent: get().recent.map((r) => (r.audioUrl === audioUrl ? { ...r, lastTime } : r)) }),
 
       playPause: () => get().ws?.playPause(),
