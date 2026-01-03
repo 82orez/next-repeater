@@ -1,7 +1,7 @@
 // src/components/Waveform.tsx
 "use client";
 
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import Minimap from "wavesurfer.js/dist/plugins/minimap.esm.js";
@@ -15,10 +15,7 @@ const RB_TMP_ID = "rb_tmp";
 // ✅ 스냅 간격(0.01초)
 const SNAP_SEC = 0.01;
 
-type LabelInfo = { mode: "NONE" } | { mode: "A"; t: number } | { mode: "B"; t: number } | { mode: "AB"; a: number; b: number };
-
 export default function Waveform() {
-  const wrapRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
 
@@ -38,8 +35,6 @@ export default function Waveform() {
   const rbLastTimeRef = useRef(0);
   const rbTmpRegionRef = useRef<any | null>(null);
   const rbPointerIdRef = useRef<number | null>(null);
-
-  const [labelInfo, setLabelInfo] = useState<LabelInfo>({ mode: "NONE" });
 
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
@@ -102,7 +97,6 @@ export default function Waveform() {
   };
 
   const setRegionTimes = (r: any, start: number, end: number) => {
-    // wavesurfer regions API 버전에 따라 setOptions/update 지원이 다를 수 있어 fallback 제공
     if (typeof r?.setOptions === "function") r.setOptions({ start, end });
     else if (typeof r?.update === "function") r.update({ start, end });
     else {
@@ -110,15 +104,6 @@ export default function Waveform() {
       r.end = end;
     }
   };
-
-  // 라벨 위치(퍼센트)
-  const pct = useMemo(() => {
-    const dur = wsRef.current?.getDuration?.() || 0;
-    return (t: number) => {
-      if (!dur || dur <= 0) return 0;
-      return Math.min(100, Math.max(0, (t / dur) * 100));
-    };
-  }, [audioUrl, loopA, loopB, labelInfo.mode]);
 
   // store 값으로 다시 그리기(우클릭 선택 취소 시 복구)
   const redrawFromValues = (a0: number | null, b0: number | null, enabled: boolean) => {
@@ -143,7 +128,6 @@ export default function Waveform() {
           resize: true,
           color: enabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
         });
-        setLabelInfo({ mode: "AB", a, b });
         return;
       }
     }
@@ -158,7 +142,6 @@ export default function Waveform() {
         resize: false,
         color: "rgba(245, 158, 11, 0.22)",
       });
-      setLabelInfo({ mode: "A", t: start });
       return;
     }
 
@@ -172,11 +155,8 @@ export default function Waveform() {
         resize: false,
         color: "rgba(244, 63, 94, 0.22)",
       });
-      setLabelInfo({ mode: "B", t: start });
       return;
     }
-
-    setLabelInfo({ mode: "NONE" });
   };
 
   useEffect(() => {
@@ -200,7 +180,7 @@ export default function Waveform() {
       height: 150,
       normalize: true,
       cursorWidth: 1,
-      dragToSeek: true, // 좌클릭: 탐색
+      dragToSeek: true,
       barWidth: 2,
       barGap: 2,
       plugins: minimap ? [regions, minimap] : [regions],
@@ -217,14 +197,13 @@ export default function Waveform() {
       const st = usePlayerStore.getState();
       ws.setPlaybackRate(st.playbackRate);
       ws.setVolume(st.volume);
-      ws.zoom(st.zoomPps); // ✅ 현재 zoom 적용
+      ws.zoom(st.zoomPps);
     });
 
     ws.on("play", () => setPlaying(true));
     ws.on("pause", () => setPlaying(false));
     ws.on("finish", () => setPlaying(false));
 
-    // timeupdate: A–B 반복 처리
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
 
@@ -294,7 +273,7 @@ export default function Waveform() {
       }
     });
 
-    // region-created 방어(혹시 생기면 제거 후 반영) + ✅ 스냅
+    // region-created 방어 + 스냅
     regions.on("region-created", (r: any) => {
       if (r.id === AB_REGION_ID || r.id === MARK_A_ID || r.id === MARK_B_ID || r.id === RB_TMP_ID) return;
 
@@ -310,7 +289,6 @@ export default function Waveform() {
 
       const start = snapTime(start0, dur);
       const end = snapTime(end0, dur);
-
       if (end <= start) return;
 
       setLoopRange(start, end);
@@ -320,7 +298,7 @@ export default function Waveform() {
       clearAllRegions();
     });
 
-    // ✅ AB/마커 드래그 업데이트 + 스냅(0.01s)
+    // AB/마커 업데이트 + 스냅(0.01s)
     regions.on("region-updated", (r: any) => {
       if (r.id === RB_TMP_ID) return;
       if (snapApplyingRef.current) return;
@@ -328,13 +306,11 @@ export default function Waveform() {
       const dur = ws.getDuration() || 0;
       const EPS = 0.08;
 
-      // 마커(A/B)는 start만 스냅하고, end는 start+EPS 유지
       if (r.id === MARK_A_ID || r.id === MARK_B_ID) {
         const s0 = Math.max(0, r.start ?? 0);
         const s = snapTime(s0, dur);
         const e = Math.min(dur, s + EPS);
 
-        // region UI도 스냅 위치로 보정
         if (Math.abs(s - s0) > 1e-6) {
           snapApplyingRef.current = true;
           setRegionTimes(r, s, e);
@@ -353,17 +329,14 @@ export default function Waveform() {
         return;
       }
 
-      // AB는 start/end 각각 스냅
       if (r.id === AB_REGION_ID) {
         const s0 = Math.max(0, r.start ?? 0);
         const e0 = Math.max(0, r.end ?? 0);
 
         const s = snapTime(s0, dur);
         const e = snapTime(e0, dur);
-
         if (e <= s) return;
 
-        // UI 보정
         if (Math.abs(s - s0) > 1e-6 || Math.abs(e - e0) > 1e-6) {
           snapApplyingRef.current = true;
           setRegionTimes(r, s, e);
@@ -378,9 +351,7 @@ export default function Waveform() {
       }
     });
 
-    // =========================
-    // ✅ 우클릭 드래그(A–B 선택)
-    // =========================
+    // 우클릭 드래그(A–B 선택)
     const wrapperEl: HTMLElement = ((ws as any).getWrapper?.() as HTMLElement) || containerRef.current!;
 
     const xToTime = (clientX: number) => {
@@ -415,7 +386,6 @@ export default function Waveform() {
       rbLastTimeRef.current = t0;
 
       clearAllRegions();
-      setLabelInfo({ mode: "NONE" });
 
       const t1 = Math.min(dur, t0 + 0.01);
       const tmp = regions.addRegion({
@@ -473,14 +443,12 @@ export default function Waveform() {
       } catch {}
       rbTmpRegionRef.current = null;
 
-      // 너무 짧으면(거의 클릭) 기존 표시 복구
       if (b0 - a0 < 0.05) {
         const st = usePlayerStore.getState();
         redrawFromValues(st.loopA, st.loopB, st.loopEnabled);
         return;
       }
 
-      // ✅ 스냅 적용
       const a = snapTime(a0, dur);
       const b = snapTime(b0, dur);
       if (b <= a) return;
@@ -489,13 +457,11 @@ export default function Waveform() {
       setLoopEnabled(true);
       resetRepeatCount();
 
-      // ✅ 구간 설정 후 즉시 A로 이동
+      // 구간 설정 후 즉시 A로 이동
       usePlayerStore.getState().setTime(a);
     };
 
-    // =========================
-    // ✅ Ctrl/⌘ + Wheel Zoom
-    // =========================
+    // Ctrl/⌘ + Wheel Zoom
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
 
@@ -504,7 +470,6 @@ export default function Waveform() {
 
       e.preventDefault();
 
-      // deltaY > 0 => 축소, deltaY < 0 => 확대
       const dir = e.deltaY > 0 ? -1 : 1;
       const step = Math.max(10, Math.round(st.zoomPps * 0.08)); // 8%
       st.setZoomPps(st.zoomPps + dir * step);
@@ -551,7 +516,6 @@ export default function Waveform() {
 
     clearAllRegions();
     cancelFade();
-    setLabelInfo({ mode: "NONE" });
 
     if (!audioUrl) return;
     ws.load(audioUrl);
@@ -572,7 +536,7 @@ export default function Waveform() {
     const ws = wsRef.current;
     if (!regions || !ws) return;
 
-    if (rbSelectingRef.current) return; // 우클릭 선택 중 임시 region 유지
+    if (rbSelectingRef.current) return;
 
     clearAllRegions();
 
@@ -594,7 +558,6 @@ export default function Waveform() {
           resize: true,
           color: loopEnabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
         });
-        setLabelInfo({ mode: "AB", a, b });
         return;
       }
     }
@@ -609,7 +572,6 @@ export default function Waveform() {
         resize: false,
         color: "rgba(245, 158, 11, 0.22)",
       });
-      setLabelInfo({ mode: "A", t: start });
       return;
     }
 
@@ -623,58 +585,23 @@ export default function Waveform() {
         resize: false,
         color: "rgba(244, 63, 94, 0.22)",
       });
-      setLabelInfo({ mode: "B", t: start });
       return;
     }
-
-    setLabelInfo({ mode: "NONE" });
   }, [loopA, loopB, loopEnabled]);
 
   return (
-    <div ref={wrapRef} className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
-      {/* ✅ Overview / Minimap */}
+    <div className="w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+      {/* Overview / Minimap */}
       <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
         <div className="mb-1 flex items-center justify-between">
           <div className="text-xs font-medium text-zinc-700">Overview</div>
-          <div className="text-[11px] text-zinc-500">클릭/드래그로 이동 · 확대 시 뷰포트가 표시됩니다</div>
+          <div className="text-[11px] text-zinc-500">클릭/드래그로 이동 · 확대 시 뷰포트 표시</div>
         </div>
         <div ref={minimapRef} className="w-full" />
       </div>
 
       {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
-
-      {/* 라벨 오버레이 */}
-      {labelInfo.mode === "A" && (
-        <div
-          className="pointer-events-none absolute top-[74px] -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
-          style={{ left: `${pct(labelInfo.t)}%` }}>
-          A
-        </div>
-      )}
-
-      {labelInfo.mode === "B" && (
-        <div
-          className="pointer-events-none absolute top-[74px] -translate-x-1/2 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
-          style={{ left: `${pct(labelInfo.t)}%` }}>
-          B
-        </div>
-      )}
-
-      {labelInfo.mode === "AB" && (
-        <>
-          <div
-            className="pointer-events-none absolute top-[74px] -translate-x-1/2 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
-            style={{ left: `${pct(labelInfo.a)}%` }}>
-            A
-          </div>
-          <div
-            className="pointer-events-none absolute top-[74px] -translate-x-1/2 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow"
-            style={{ left: `${pct(labelInfo.b)}%` }}>
-            B
-          </div>
-        </>
-      )}
 
       <p className="mt-2 text-xs text-zinc-500">
         좌클릭 드래그: 탐색, <b>우클릭 드래그: A–B 구간 선택</b>, <b>Ctrl/⌘ + 휠: 줌</b>, <b>스냅: 0.01s</b>
