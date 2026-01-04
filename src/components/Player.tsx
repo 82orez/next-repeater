@@ -3,7 +3,7 @@
 
 import React, { useEffect, useMemo, useRef } from "react";
 import clsx from "clsx";
-import { Pause, Play, Square, Repeat, Flag, Upload, Timer, ChevronLeft, ChevronRight, Volume2, Gauge } from "lucide-react";
+import { Pause, Play, Repeat, Flag, Upload, Timer, ChevronLeft, ChevronRight, Volume2, Gauge, RotateCcw } from "lucide-react";
 import Waveform from "@/components/Waveform";
 import BookmarkPanel from "@/components/BookmarkPanel";
 import { usePlayerStore } from "@/store/playerStore";
@@ -294,10 +294,22 @@ export default function Player() {
           <Waveform />
         </div>
 
-        {/* ✅ Transport: Play/Stop + A/B/Reset + Repeat Toggle + Seek/Phrase/Volume */}
+        {/* ✅ Transport: (A) - (Play/Pause) - (B) / Seek - (처음으로) - Seek */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Play / Stop */}
+            {/* A */}
+            <button
+              onClick={() => {
+                setLoopA(currentTime);
+                resetRepeatCount();
+              }}
+              disabled={!audioUrl}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="KeyA">
+              <Flag className="h-4 w-4" /> A
+            </button>
+
+            {/* Play / Pause (A와 B 사이) */}
             <button
               onClick={playPause}
               disabled={controlsDisabled}
@@ -310,28 +322,7 @@ export default function Player() {
               {isPlaying ? "일시정지" : "재생"}
             </button>
 
-            <button
-              onClick={stop}
-              disabled={controlsDisabled}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
-              <Square className="h-4 w-4" />
-              Stop
-            </button>
-
-            <div className="h-8 w-px bg-zinc-200" />
-
-            {/* A / B / Reset */}
-            <button
-              onClick={() => {
-                setLoopA(currentTime);
-                resetRepeatCount();
-              }}
-              disabled={!audioUrl}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="KeyA">
-              <Flag className="h-4 w-4" /> A
-            </button>
-
+            {/* B */}
             <button
               onClick={() => {
                 setLoopB(currentTime);
@@ -344,6 +335,7 @@ export default function Player() {
               <Flag className="h-4 w-4" /> B
             </button>
 
+            {/* Reset loop */}
             <button
               onClick={() => {
                 setLoopA(null);
@@ -356,7 +348,7 @@ export default function Player() {
               초기화
             </button>
 
-            {/* ✅ Repeat Toggle (이전 A–B 섹션에서 이동) */}
+            {/* Repeat Toggle */}
             <button
               onClick={() => {
                 if (!canLoop) return;
@@ -379,13 +371,26 @@ export default function Player() {
 
             <div className="h-8 w-px bg-zinc-200" />
 
-            {/* Seek */}
+            {/* Seek - Stop(처음으로) - Seek */}
             <button
               onClick={() => seekBy(-3)}
               disabled={controlsDisabled}
               className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
               ← 3s
             </button>
+
+            <button
+              onClick={() => {
+                stop();
+                // 안전장치: stop이 내부적으로 0으로 이동하지 않는 구현이라도 "처음으로" UX를 보장
+                setTime(0);
+              }}
+              disabled={controlsDisabled}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
+              <RotateCcw className="h-4 w-4" />
+              처음으로
+            </button>
+
             <button
               onClick={() => seekBy(3)}
               disabled={controlsDisabled}
@@ -429,7 +434,7 @@ export default function Player() {
             </div>
           </div>
 
-          {/* ✅ 상태 텍스트는 Transport 하단 1줄로만 */}
+          {/* 상태 텍스트 */}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
             <span className="min-w-0 truncate">
               {loopLabel} · 탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>. (Space: 재생/일시정지)
@@ -439,7 +444,7 @@ export default function Player() {
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {/* ✅ A–B 섹션: 상단 블록(제목/loopLabel/토글) 제거 후 옵션만 남김 */}
+          {/* Loop Options */}
           <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm lg:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <label className="block">
