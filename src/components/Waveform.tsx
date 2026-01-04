@@ -1,7 +1,7 @@
 // src/components/Waveform.tsx
 "use client";
 
-import React, { useRef, useEffect, useMemo } from "react";
+import React, { useRef, useEffect, useMemo, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import Minimap from "wavesurfer.js/dist/plugins/minimap.esm.js";
@@ -49,6 +49,10 @@ export default function Waveform() {
   const rbLastTimeRef = useRef(0);
   const rbTmpRegionRef = useRef<any | null>(null);
   const rbPointerIdRef = useRef<number | null>(null);
+
+  // ✅ 로딩 인디케이터
+  const [isLoadingWave, setIsLoadingWave] = useState(false);
+  const [loadingPct, setLoadingPct] = useState<number | null>(null);
 
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
@@ -239,6 +243,12 @@ export default function Waveform() {
     regionsRef.current = regions;
     setWs(ws);
 
+    // ✅ 로딩 진행률 (0~100)
+    ws.on("loading", (pct) => {
+      setIsLoadingWave(true);
+      setLoadingPct(typeof pct === "number" ? pct : null);
+    });
+
     ws.on("ready", () => {
       setReady(true);
       setDuration(ws.getDuration());
@@ -247,6 +257,9 @@ export default function Waveform() {
       ws.setPlaybackRate(st.playbackRate);
       ws.setVolume(st.volume);
       ws.zoom(st.zoomPps);
+
+      setIsLoadingWave(false);
+      setLoadingPct(null);
     });
 
     ws.on("play", () => setPlaying(true));
@@ -530,7 +543,6 @@ export default function Waveform() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
 
-      // 입력 중 ESC는 사용자가 의도적으로 쓸 수도 있으니 방해하지 않음
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
       const isTypingTarget = tag === "input" || tag === "textarea" || tag === "select" || (target as any)?.isContentEditable;
@@ -590,8 +602,16 @@ export default function Waveform() {
     clearAllRegions();
     cancelFade();
 
-    if (!audioUrl) return;
-    ws.load(audioUrl);
+    // ✅ 로딩 시작
+    if (audioUrl) {
+      setIsLoadingWave(true);
+      setLoadingPct(null);
+      ws.load(audioUrl);
+    } else {
+      // 오디오가 없으면 로딩 오버레이 제거
+      setIsLoadingWave(false);
+      setLoadingPct(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
@@ -673,7 +693,22 @@ export default function Waveform() {
   };
 
   return (
-    <div className="w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+    <div className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+      {/* ✅ 로딩 오버레이 (파형/미니맵 위에) */}
+      {isLoadingWave && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/70 backdrop-blur-sm">
+          <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+            <div className="flex flex-col">
+              <div className="text-sm font-semibold text-zinc-800">Loading audio…</div>
+              <div className="text-xs text-zinc-500">
+                {loadingPct != null ? `${Math.max(0, Math.min(100, Math.round(loadingPct)))}%` : "잠시만 기다려주세요"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Overview / Minimap */}
       <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
         <div className="mb-1 flex items-center justify-between">
@@ -693,7 +728,7 @@ export default function Waveform() {
             <button
               type="button"
               onClick={seekToA}
-              disabled={abText.a == null}
+              disabled={abText.a == null || isLoadingWave}
               className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 hover:bg-amber-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               title={abText.a != null ? "A로 이동" : "A가 설정되지 않았습니다"}>
               A {abText.a != null ? fmtTimeCS(abText.a) : "--:--.--"}
@@ -702,7 +737,7 @@ export default function Waveform() {
             <button
               type="button"
               onClick={seekToB}
-              disabled={abText.b == null}
+              disabled={abText.b == null || isLoadingWave}
               className="inline-flex items-center rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 hover:bg-rose-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               title={abText.b != null ? "B로 이동" : "B가 설정되지 않았습니다"}>
               B {abText.b != null ? fmtTimeCS(abText.b) : "--:--.--"}
