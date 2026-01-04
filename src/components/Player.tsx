@@ -294,7 +294,7 @@ export default function Player() {
           <Waveform />
         </div>
 
-        {/* ✅ Transport(Play/Stop/Seek/Phrase/Volume) + ✅ A/B/Reset을 여기에 추가 */}
+        {/* ✅ Transport: Play/Stop + A/B/Reset + Repeat Toggle + Seek/Phrase/Volume */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
             {/* Play / Stop */}
@@ -320,7 +320,7 @@ export default function Player() {
 
             <div className="h-8 w-px bg-zinc-200" />
 
-            {/* ✅ A / B / Reset */}
+            {/* A / B / Reset */}
             <button
               onClick={() => {
                 setLoopA(currentTime);
@@ -354,6 +354,27 @@ export default function Player() {
               disabled={!audioUrl}
               className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60">
               초기화
+            </button>
+
+            {/* ✅ Repeat Toggle (이전 A–B 섹션에서 이동) */}
+            <button
+              onClick={() => {
+                if (!canLoop) return;
+                setLoopEnabled(!loopEnabled);
+                resetRepeatCount();
+              }}
+              disabled={!canLoop}
+              className={clsx(
+                "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
+                canLoop
+                  ? loopEnabled
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
+                  : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
+              )}
+              title="KeyL">
+              <Repeat className="h-4 w-4" />
+              {loopEnabled ? "반복 ON" : "반복 OFF"}
             </button>
 
             <div className="h-8 w-px bg-zinc-200" />
@@ -408,45 +429,19 @@ export default function Player() {
             </div>
           </div>
 
+          {/* ✅ 상태 텍스트는 Transport 하단 1줄로만 */}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
-            <span>
-              탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>. (Space: 재생/일시정지)
+            <span className="min-w-0 truncate">
+              {loopLabel} · 탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>. (Space: 재생/일시정지)
             </span>
             <span className="rounded-full bg-zinc-100 px-2 py-1 text-zinc-600">반복: {repeatCount}</span>
           </div>
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {/* A-B (버튼은 Transport로 이동했으므로 옵션/토글 중심으로 단순화) */}
+          {/* ✅ A–B 섹션: 상단 블록(제목/loopLabel/토글) 제거 후 옵션만 남김 */}
           <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm lg:col-span-2">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-sm font-semibold text-zinc-900">A–B 구간반복</div>
-                <div className="mt-1 text-xs text-zinc-500">{loopLabel}</div>
-              </div>
-
-              <button
-                onClick={() => {
-                  if (!canLoop) return;
-                  setLoopEnabled(!loopEnabled);
-                  resetRepeatCount();
-                }}
-                disabled={!canLoop}
-                className={clsx(
-                  "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
-                  canLoop
-                    ? loopEnabled
-                      ? "bg-blue-600 text-white hover:bg-blue-700"
-                      : "border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
-                    : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
-                )}
-                title="KeyL">
-                <Repeat className="h-4 w-4" />
-                {loopEnabled ? "반복 ON" : "반복 OFF"}
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <label className="block">
                 <div className="flex items-center gap-2 text-xs font-medium text-zinc-600">
                   <Timer className="h-4 w-4" /> Auto Pause (ms)
