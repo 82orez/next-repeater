@@ -224,6 +224,7 @@ export default function Player() {
             </div>
           </div>
 
+          {/* ✅ 상단: 파일 불러오기만 유지 */}
           <div className="flex flex-wrap items-center gap-2">
             <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFileChange} />
 
@@ -233,34 +234,34 @@ export default function Player() {
               <Upload className="h-4 w-4" />
               오디오 불러오기
             </button>
+          </div>
+        </div>
 
-            <div className="h-9 w-px bg-zinc-200" />
-
+        {/* ✅ Transport / Navigation / Volume (재생/정지 버튼을 여기로 이동) */}
+        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={playPause}
               disabled={controlsDisabled}
               className={clsx(
-                "inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium shadow-sm",
+                "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
                 controlsDisabled ? "cursor-not-allowed bg-zinc-900/50 text-white" : "bg-zinc-900 text-white hover:bg-zinc-800",
               )}
               title="Space">
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              재생/일시정지
+              {isPlaying ? "일시정지" : "재생"}
             </button>
 
             <button
               onClick={stop}
               disabled={controlsDisabled}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
               <Square className="h-4 w-4" />
               Stop
             </button>
-          </div>
-        </div>
 
-        {/* Quick actions (Seek bar 제거: Overview/파형에서 탐색) */}
-        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center gap-2">
+            <div className="h-8 w-px bg-zinc-200" />
+
             <button
               onClick={() => seekBy(-3)}
               disabled={controlsDisabled}
@@ -309,7 +310,7 @@ export default function Player() {
           </div>
 
           <div className="mt-2 text-[11px] text-zinc-500">
-            탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>로 하세요. (range bar 제거)
+            탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>로 하세요. (Space: 재생/일시정지)
           </div>
         </div>
 
