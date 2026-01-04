@@ -258,24 +258,9 @@ export default function Player() {
           </div>
         </div>
 
-        {/* Seek */}
+        {/* Quick actions (Seek bar 제거: Overview/파형에서 탐색) */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-zinc-500">
-            <span>{fmtTime(currentTime)}</span>
-            <span>{fmtTime(duration)}</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(0, duration)}
-            step={0.01}
-            value={Math.min(currentTime, duration || 0)}
-            onChange={(e) => setTime(Number(e.target.value))}
-            disabled={!audioUrl || !ws}
-            className="mt-2 w-full disabled:opacity-60"
-          />
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => seekBy(-3)}
               disabled={controlsDisabled}
@@ -321,6 +306,10 @@ export default function Player() {
                 disabled={!ws}
               />
             </div>
+          </div>
+
+          <div className="mt-2 text-[11px] text-zinc-500">
+            탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>로 하세요. (range bar 제거)
           </div>
         </div>
 
