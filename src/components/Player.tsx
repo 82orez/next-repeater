@@ -294,9 +294,10 @@ export default function Player() {
           <Waveform />
         </div>
 
-        {/* ✅ Transport(재생 버튼 있는 부분 전체) => 파형 바로 아래로 이동 */}
+        {/* ✅ Transport(Play/Stop/Seek/Phrase/Volume) + ✅ A/B/Reset을 여기에 추가 */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
+            {/* Play / Stop */}
             <button
               onClick={playPause}
               disabled={controlsDisabled}
@@ -319,6 +320,45 @@ export default function Player() {
 
             <div className="h-8 w-px bg-zinc-200" />
 
+            {/* ✅ A / B / Reset */}
+            <button
+              onClick={() => {
+                setLoopA(currentTime);
+                resetRepeatCount();
+              }}
+              disabled={!audioUrl}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="KeyA">
+              <Flag className="h-4 w-4" /> A
+            </button>
+
+            <button
+              onClick={() => {
+                setLoopB(currentTime);
+                resetRepeatCount();
+                setLoopEnabled(true);
+              }}
+              disabled={!audioUrl}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="KeyB">
+              <Flag className="h-4 w-4" /> B
+            </button>
+
+            <button
+              onClick={() => {
+                setLoopA(null);
+                setLoopB(null);
+                setLoopEnabled(false);
+                resetRepeatCount();
+              }}
+              disabled={!audioUrl}
+              className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60">
+              초기화
+            </button>
+
+            <div className="h-8 w-px bg-zinc-200" />
+
+            {/* Seek */}
             <button
               onClick={() => seekBy(-3)}
               disabled={controlsDisabled}
@@ -334,6 +374,7 @@ export default function Player() {
 
             <div className="h-8 w-px bg-zinc-200" />
 
+            {/* Phrase nav */}
             <button
               onClick={goPrevPhrase}
               disabled={!phrases.length || controlsDisabled}
@@ -348,6 +389,7 @@ export default function Player() {
               다음 Phrase <ChevronRight className="h-4 w-4" />
             </button>
 
+            {/* Volume */}
             <div className="ml-auto flex items-center gap-3">
               <div className="flex items-center gap-2 text-xs text-zinc-600">
                 <Volume2 className="h-4 w-4" />
@@ -366,13 +408,16 @@ export default function Player() {
             </div>
           </div>
 
-          <div className="mt-2 text-[11px] text-zinc-500">
-            탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>로 하세요. (Space: 재생/일시정지)
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
+            <span>
+              탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>. (Space: 재생/일시정지)
+            </span>
+            <span className="rounded-full bg-zinc-100 px-2 py-1 text-zinc-600">반복: {repeatCount}</span>
           </div>
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {/* A-B */}
+          {/* A-B (버튼은 Transport로 이동했으므로 옵션/토글 중심으로 단순화) */}
           <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm lg:col-span-2">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -399,46 +444,6 @@ export default function Player() {
                 <Repeat className="h-4 w-4" />
                 {loopEnabled ? "반복 ON" : "반복 OFF"}
               </button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => {
-                  setLoopA(currentTime);
-                  resetRepeatCount();
-                }}
-                disabled={!audioUrl}
-                className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-                title="KeyA">
-                <Flag className="h-4 w-4" /> A 지정
-              </button>
-
-              <button
-                onClick={() => {
-                  setLoopB(currentTime);
-                  resetRepeatCount();
-                  setLoopEnabled(true);
-                }}
-                disabled={!audioUrl}
-                className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-                title="KeyB">
-                <Flag className="h-4 w-4" /> B 지정
-              </button>
-
-              <button
-                onClick={() => {
-                  setLoopA(null);
-                  setLoopB(null);
-                  setLoopEnabled(false);
-                  resetRepeatCount();
-                }}
-                className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100">
-                초기화
-              </button>
-
-              <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-                <span className="rounded-full bg-zinc-100 px-2 py-1">반복: {repeatCount}</span>
-              </div>
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
