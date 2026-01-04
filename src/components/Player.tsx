@@ -224,10 +224,9 @@ export default function Player() {
             </div>
           </div>
 
-          {/* ✅ 상단: 파일 불러오기만 유지 */}
+          {/* 상단: 파일 불러오기 */}
           <div className="flex flex-wrap items-center gap-2">
             <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFileChange} />
-
             <button
               onClick={onPickFile}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
@@ -237,7 +236,65 @@ export default function Player() {
           </div>
         </div>
 
-        {/* ✅ Transport / Navigation / Volume (재생/정지 버튼을 여기로 이동) */}
+        {/* ✅ Zoom */}
+        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-zinc-900">Wave Zoom</div>
+              <div className="mt-1 text-xs text-zinc-500">
+                <b>Ctrl/⌘ + 휠</b>로도 줌이 됩니다. (⌘/Ctrl +/−/0 단축키 지원)
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setZoomPps(zoomPps - 20)}
+                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50"
+                disabled={!ws}>
+                −
+              </button>
+
+              <div className="min-w-[80px] text-center text-sm font-medium text-zinc-900">{zoomPps} pps</div>
+
+              <button
+                onClick={() => setZoomPps(zoomPps + 20)}
+                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50"
+                disabled={!ws}>
+                +
+              </button>
+
+              <button
+                onClick={() => setZoomPps(80)}
+                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
+                disabled={!ws}
+                title="Ctrl/⌘ + 0">
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <span className="w-10 text-xs text-zinc-500">20</span>
+            <input
+              type="range"
+              min={20}
+              max={800}
+              step={10}
+              value={zoomPps}
+              onChange={(e) => setZoomPps(Number(e.target.value))}
+              className="w-full"
+              disabled={!ws}
+            />
+            <span className="w-10 text-right text-xs text-zinc-500">800</span>
+          </div>
+        </div>
+
+        {/* Waveform */}
+        <div className="mt-5">
+          <Waveform />
+        </div>
+
+        {/* ✅ Transport(재생 버튼 있는 부분 전체) => 파형 바로 아래로 이동 */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -312,64 +369,6 @@ export default function Player() {
           <div className="mt-2 text-[11px] text-zinc-500">
             탐색은 <b>Overview</b> 또는 <b>파형 드래그(좌클릭)</b>로 하세요. (Space: 재생/일시정지)
           </div>
-        </div>
-
-        {/* ✅ Zoom */}
-        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-zinc-900">Wave Zoom</div>
-              <div className="mt-1 text-xs text-zinc-500">
-                <b>Ctrl/⌘ + 휠</b>로도 줌이 됩니다. (⌘/Ctrl +/−/0 단축키 지원)
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setZoomPps(zoomPps - 20)}
-                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50"
-                disabled={!ws}>
-                −
-              </button>
-
-              <div className="min-w-[80px] text-center text-sm font-medium text-zinc-900">{zoomPps} pps</div>
-
-              <button
-                onClick={() => setZoomPps(zoomPps + 20)}
-                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50"
-                disabled={!ws}>
-                +
-              </button>
-
-              <button
-                onClick={() => setZoomPps(80)}
-                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
-                disabled={!ws}
-                title="Ctrl/⌘ + 0">
-                Reset
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center gap-3">
-            <span className="w-10 text-xs text-zinc-500">20</span>
-            <input
-              type="range"
-              min={20}
-              max={800}
-              step={10}
-              value={zoomPps}
-              onChange={(e) => setZoomPps(Number(e.target.value))}
-              className="w-full"
-              disabled={!ws}
-            />
-            <span className="w-10 text-right text-xs text-zinc-500">800</span>
-          </div>
-        </div>
-
-        {/* Waveform */}
-        <div className="mt-5">
-          <Waveform />
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
