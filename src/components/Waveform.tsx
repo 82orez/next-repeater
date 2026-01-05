@@ -233,7 +233,15 @@ export default function Waveform() {
       height: 150,
       normalize: true,
       cursorWidth: 1,
-      dragToSeek: true,
+
+      /**
+       * ✅ UX 개선(모바일 포함):
+       * - 메인 파형 좌클릭/드래그로 seek 비활성화
+       * - 이동은 Overview(미니맵) / 칩(A/B) / Transport(슬라이더/버튼)로만
+       */
+      interact: false,
+      dragToSeek: false,
+
       barWidth: 2,
       barGap: 2,
       plugins: minimap ? [regions, minimap] : [regions],
@@ -718,7 +726,7 @@ export default function Waveform() {
         <div ref={minimapRef} className="w-full" />
       </div>
 
-      {/* Main waveform */}
+      {/* Main waveform (좌클릭/드래그 seek 비활성) */}
       <div ref={containerRef} className="w-full" />
 
       {/* A/B 텍스트 + 클릭하면 seek */}
@@ -747,7 +755,8 @@ export default function Waveform() {
           </div>
 
           <div className="text-[11px] text-zinc-500">
-            좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간 초기화 · 스냅 0.01s
+            메인 파형: 이동 비활성 · <b>Overview</b>: 클릭/드래그 이동 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간
+            초기화 · 스냅 0.01s
           </div>
         </div>
       </div>
