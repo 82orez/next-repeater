@@ -305,7 +305,7 @@ export default function Player() {
               }}
               disabled={!audioUrl}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="KeyA">
+              title="A 지정 (KeyA)">
               <Flag className="h-4 w-4" /> A
             </button>
 
@@ -317,7 +317,7 @@ export default function Player() {
                 "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
                 controlsDisabled ? "cursor-not-allowed bg-zinc-900/50 text-white" : "bg-zinc-900 text-white hover:bg-zinc-800",
               )}
-              title="Space">
+              title="재생/일시정지 (Space)">
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               {isPlaying ? "일시정지" : "재생"}
             </button>
@@ -331,7 +331,7 @@ export default function Player() {
               }}
               disabled={!audioUrl}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="KeyB">
+              title="B 지정 (KeyB)">
               <Flag className="h-4 w-4" /> B
             </button>
 
@@ -344,8 +344,11 @@ export default function Player() {
                 resetRepeatCount();
               }}
               disabled={!audioUrl}
-              className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60">
-              초기화
+              className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+              title="구간 초기화 (Esc)">
+              <span className="inline-flex items-center gap-2">
+                초기화 <span className="text-[11px] text-zinc-400">(Esc)</span>
+              </span>
             </button>
 
             {/* Repeat Toggle */}
@@ -364,18 +367,19 @@ export default function Player() {
                     : "border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
                   : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
               )}
-              title="KeyL">
+              title="반복 토글 (KeyL)">
               <Repeat className="h-4 w-4" />
               {loopEnabled ? "반복 ON" : "반복 OFF"}
             </button>
 
             <div className="h-8 w-px bg-zinc-200" />
 
-            {/* Seek - Stop(처음으로) - Seek */}
+            {/* Seek - 처음으로 - Seek */}
             <button
               onClick={() => seekBy(-3)}
               disabled={controlsDisabled}
-              className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
+              className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="3초 뒤로 (←)">
               ← 3s
             </button>
 
@@ -386,7 +390,8 @@ export default function Player() {
                 setTime(0);
               }}
               disabled={controlsDisabled}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="정지 + 00:00.00 이동">
               <RotateCcw className="h-4 w-4" />
               처음으로
             </button>
@@ -394,7 +399,8 @@ export default function Player() {
             <button
               onClick={() => seekBy(3)}
               disabled={controlsDisabled}
-              className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
+              className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="3초 앞으로 (→)">
               3s →
             </button>
 
