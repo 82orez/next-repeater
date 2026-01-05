@@ -15,10 +15,6 @@ const RB_TMP_ID = "rb_tmp";
 // ✅ 스냅 간격(0.01초)
 const SNAP_SEC = 0.01;
 
-// ✅ Mobile long-press to select
-const LONG_PRESS_MS = 320;
-const LONG_PRESS_MOVE_PX = 10;
-
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -47,19 +43,12 @@ export default function Waveform() {
   // ✅ region-updated에서 우리가 setOptions로 다시 보정할 때 무한루프 방지
   const snapApplyingRef = useRef(false);
 
-  // ✅ (우클릭/터치) 드래그 선택 상태
+  // ✅ 우클릭 드래그 상태
   const rbSelectingRef = useRef(false);
   const rbStartTimeRef = useRef(0);
   const rbLastTimeRef = useRef(0);
   const rbTmpRegionRef = useRef<any | null>(null);
   const rbPointerIdRef = useRef<number | null>(null);
-
-  // ✅ 터치 롱프레스 상태
-  const lpTimerRef = useRef<number | null>(null);
-  const lpPendingRef = useRef(false);
-  const lpStartClientRef = useRef<{ x: number; y: number } | null>(null);
-  const lpStartTimeRef = useRef(0);
-  const touchActionPrevRef = useRef<string | null>(null);
 
   // ✅ 로딩 인디케이터
   const [isLoadingWave, setIsLoadingWave] = useState(false);
@@ -148,34 +137,11 @@ export default function Waveform() {
     }
   };
 
-  const clearLongPress = () => {
-    if (lpTimerRef.current) {
-      window.clearTimeout(lpTimerRef.current);
-      lpTimerRef.current = null;
-    }
-    lpPendingRef.current = false;
-    lpStartClientRef.current = null;
-  };
-
-  const setTouchActionWhileSelecting = (wrapperEl: HTMLElement, selecting: boolean) => {
-    if (selecting) {
-      if (touchActionPrevRef.current == null) touchActionPrevRef.current = wrapperEl.style.touchAction || "";
-      wrapperEl.style.touchAction = "none";
-    } else {
-      if (touchActionPrevRef.current != null) {
-        wrapperEl.style.touchAction = touchActionPrevRef.current;
-        touchActionPrevRef.current = null;
-      }
-    }
-  };
-
   // ✅ ESC로 구간 초기화(스토어 + UI)
   const resetLoopAll = () => {
-    // 드래그 선택 중이면 임시 선택도 제거
+    // 우클릭 드래그 중이면 임시 선택도 제거
     rbSelectingRef.current = false;
     rbPointerIdRef.current = null;
-
-    clearLongPress();
 
     try {
       rbTmpRegionRef.current?.remove?.();
@@ -192,7 +158,7 @@ export default function Waveform() {
     resetRepeatCount();
   };
 
-  // store 값으로 다시 그리기(선택 취소 시 복구)
+  // store 값으로 다시 그리기(우클릭 선택 취소 시 복구)
   const redrawFromValues = (a0: number | null, b0: number | null, enabled: boolean) => {
     const regions = regionsRef.current;
     const ws = wsRef.current;
@@ -458,7 +424,7 @@ export default function Waveform() {
       }
     });
 
-    // (우클릭/터치) 드래그(A–B 선택)
+    // 우클릭 드래그(A–B 선택)
     const wrapperEl: HTMLElement = ((ws as any).getWrapper?.() as HTMLElement) || containerRef.current!;
 
     const xToTime = (clientX: number) => {
@@ -473,18 +439,22 @@ export default function Waveform() {
       e.preventDefault();
     };
 
-    const beginSelecting = (pointerId: number, startClientX: number) => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 2) return;
+
       const dur = ws.getDuration() || 0;
       if (dur <= 0) return;
 
+      e.preventDefault();
+
       rbSelectingRef.current = true;
-      rbPointerIdRef.current = pointerId;
+      rbPointerIdRef.current = e.pointerId;
 
       try {
-        wrapperEl.setPointerCapture(pointerId);
+        wrapperEl.setPointerCapture(e.pointerId);
       } catch {}
 
-      const t0 = xToTime(startClientX);
+      const t0 = xToTime(e.clientX);
       rbStartTimeRef.current = t0;
       rbLastTimeRef.current = t0;
 
@@ -502,140 +472,65 @@ export default function Waveform() {
       rbTmpRegionRef.current = tmp;
     };
 
-    const onPointerDown = (e: PointerEvent) => {
+    const onPointerMove = (e: PointerEvent) => {
+      if (!rbSelectingRef.current) return;
+      if (rbPointerIdRef.current !== e.pointerId) return;
+
+      e.preventDefault();
+
       const dur = ws.getDuration() || 0;
       if (dur <= 0) return;
 
-      // ✅ Desktop: Right-click drag
-      if (e.pointerType === "mouse" && e.button === 2) {
-        e.preventDefault();
-        clearLongPress();
-        beginSelecting(e.pointerId, e.clientX);
-        return;
-      }
+      const t = xToTime(e.clientX);
+      rbLastTimeRef.current = t;
 
-      // ✅ Mobile/Touch: Long-press then drag
-      if ((e.pointerType === "touch" || e.pointerType === "pen") && e.button === 0) {
-        // 스크롤/탭은 그대로 두고, 롱프레스가 성립할 때만 선택 모드로 진입
-        clearLongPress();
-        lpPendingRef.current = true;
-        lpStartClientRef.current = { x: e.clientX, y: e.clientY };
-        lpStartTimeRef.current = xToTime(e.clientX);
+      const a = Math.min(rbStartTimeRef.current, t);
+      const b = Math.max(rbStartTimeRef.current, t);
 
-        lpTimerRef.current = window.setTimeout(() => {
-          if (!lpPendingRef.current) return;
+      const tmp = rbTmpRegionRef.current;
+      if (!tmp) return;
 
-          // 선택 모드 진입: 이제부터는 스크롤 방지
-          setTouchActionWhileSelecting(wrapperEl, true);
-
-          // 롱프레스 진입 시점에 선택 시작 (초기 지점은 최초 누른 x)
-          beginSelecting(e.pointerId, lpStartClientRef.current?.x ?? e.clientX);
-
-          // 진입한 순간에는 스크롤/텍스트 선택/브라우저 제스처 방지
-          try {
-            e.preventDefault();
-          } catch {}
-
-          lpPendingRef.current = false;
-          lpTimerRef.current = null;
-        }, LONG_PRESS_MS);
-
-        return;
-      }
+      setRegionTimes(tmp, a, b);
     };
 
-    const onPointerMove = (e: PointerEvent) => {
-      // ✅ selecting 중
-      if (rbSelectingRef.current) {
-        if (rbPointerIdRef.current !== e.pointerId) return;
+    const finishRightDrag = (e: PointerEvent) => {
+      if (!rbSelectingRef.current) return;
+      if (rbPointerIdRef.current !== e.pointerId) return;
 
-        e.preventDefault();
+      e.preventDefault();
 
-        const dur = ws.getDuration() || 0;
-        if (dur <= 0) return;
+      rbSelectingRef.current = false;
+      rbPointerIdRef.current = null;
 
-        const t = xToTime(e.clientX);
-        rbLastTimeRef.current = t;
+      try {
+        wrapperEl.releasePointerCapture(e.pointerId);
+      } catch {}
 
-        const a = Math.min(rbStartTimeRef.current, t);
-        const b = Math.max(rbStartTimeRef.current, t);
+      const dur = ws.getDuration() || 0;
 
-        const tmp = rbTmpRegionRef.current;
-        if (!tmp) return;
+      const a0 = Math.min(rbStartTimeRef.current, rbLastTimeRef.current);
+      const b0 = Math.max(rbStartTimeRef.current, rbLastTimeRef.current);
 
-        setRegionTimes(tmp, a, b);
+      try {
+        rbTmpRegionRef.current?.remove?.();
+      } catch {}
+      rbTmpRegionRef.current = null;
+
+      if (b0 - a0 < 0.05) {
+        const st = usePlayerStore.getState();
+        redrawFromValues(st.loopA, st.loopB, st.loopEnabled);
         return;
       }
 
-      // ✅ 롱프레스 대기 중: 너무 움직이면(스크롤 의도) 롱프레스 취소
-      if (lpPendingRef.current && (e.pointerType === "touch" || e.pointerType === "pen")) {
-        const s = lpStartClientRef.current;
-        if (!s) return;
+      const a = snapTime(a0, dur);
+      const b = snapTime(b0, dur);
+      if (b <= a) return;
 
-        const dx = e.clientX - s.x;
-        const dy = e.clientY - s.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+      setLoopRange(a, b);
+      setLoopEnabled(true);
+      resetRepeatCount();
 
-        if (dist >= LONG_PRESS_MOVE_PX) {
-          clearLongPress();
-          setTouchActionWhileSelecting(wrapperEl, false);
-        }
-      }
-    };
-
-    const finishSelecting = (e: PointerEvent) => {
-      // selecting 종료
-      if (rbSelectingRef.current) {
-        if (rbPointerIdRef.current !== e.pointerId) return;
-
-        e.preventDefault();
-
-        rbSelectingRef.current = false;
-        rbPointerIdRef.current = null;
-
-        try {
-          wrapperEl.releasePointerCapture(e.pointerId);
-        } catch {}
-
-        const dur = ws.getDuration() || 0;
-
-        const a0 = Math.min(rbStartTimeRef.current, rbLastTimeRef.current);
-        const b0 = Math.max(rbStartTimeRef.current, rbLastTimeRef.current);
-
-        try {
-          rbTmpRegionRef.current?.remove?.();
-        } catch {}
-        rbTmpRegionRef.current = null;
-
-        // selecting 중에는 touch-action: none 을 걸어뒀을 수 있으니 원복
-        setTouchActionWhileSelecting(wrapperEl, false);
-
-        // 너무 짧으면 취소(복구)
-        if (b0 - a0 < 0.05) {
-          const st = usePlayerStore.getState();
-          redrawFromValues(st.loopA, st.loopB, st.loopEnabled);
-          return;
-        }
-
-        const a = snapTime(a0, dur);
-        const b = snapTime(b0, dur);
-        if (b <= a) return;
-
-        setLoopRange(a, b);
-        setLoopEnabled(true);
-        resetRepeatCount();
-
-        // ✅ 구간 시작으로 이동(이전 버그 방지/UX 일관성)
-        usePlayerStore.getState().setTime(a);
-
-        return;
-      }
-
-      // 롱프레스 대기 중 종료(탭/스크롤로 끝난 경우)
-      if (lpPendingRef.current && (e.pointerType === "touch" || e.pointerType === "pen")) {
-        clearLongPress();
-        setTouchActionWhileSelecting(wrapperEl, false);
-      }
+      usePlayerStore.getState().setTime(a);
     };
 
     // Ctrl/⌘ + Wheel Zoom
@@ -665,18 +560,17 @@ export default function Waveform() {
       const st = usePlayerStore.getState();
       const hasLoop = st.loopA != null || st.loopB != null || st.loopEnabled;
 
-      if (!hasLoop && !rbSelectingRef.current && !lpPendingRef.current) return;
+      if (!hasLoop && !rbSelectingRef.current) return;
 
       e.preventDefault();
       resetLoopAll();
-      setTouchActionWhileSelecting(wrapperEl, false);
     };
 
     wrapperEl.addEventListener("contextmenu", onContextMenu);
     wrapperEl.addEventListener("pointerdown", onPointerDown);
     wrapperEl.addEventListener("pointermove", onPointerMove);
-    wrapperEl.addEventListener("pointerup", finishSelecting);
-    wrapperEl.addEventListener("pointercancel", finishSelecting);
+    wrapperEl.addEventListener("pointerup", finishRightDrag);
+    wrapperEl.addEventListener("pointercancel", finishRightDrag);
     wrapperEl.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKeyDown);
 
@@ -687,14 +581,11 @@ export default function Waveform() {
         loopTimerRef.current = null;
       }
 
-      clearLongPress();
-      setTouchActionWhileSelecting(wrapperEl, false);
-
       wrapperEl.removeEventListener("contextmenu", onContextMenu);
       wrapperEl.removeEventListener("pointerdown", onPointerDown);
       wrapperEl.removeEventListener("pointermove", onPointerMove);
-      wrapperEl.removeEventListener("pointerup", finishSelecting);
-      wrapperEl.removeEventListener("pointercancel", finishSelecting);
+      wrapperEl.removeEventListener("pointerup", finishRightDrag);
+      wrapperEl.removeEventListener("pointercancel", finishRightDrag);
       wrapperEl.removeEventListener("wheel", onWheel as any);
       window.removeEventListener("keydown", onKeyDown);
 
@@ -864,8 +755,8 @@ export default function Waveform() {
           </div>
 
           <div className="text-[11px] text-zinc-500">
-            메인 파형: 이동 비활성 · <b>Overview</b>: 클릭/드래그 이동 · <b>PC</b>: 우클릭 드래그 구간 설정 · <b>모바일</b>: <b>길게 누르기+드래그</b>
-            로 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간 초기화 · 스냅 0.01s
+            메인 파형: 이동 비활성 · <b>Overview</b>: 클릭/드래그 이동 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간
+            초기화 · 스냅 0.01s
           </div>
         </div>
       </div>
