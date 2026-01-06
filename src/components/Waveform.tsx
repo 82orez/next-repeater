@@ -54,12 +54,14 @@ export default function Waveform() {
   const [isLoadingWave, setIsLoadingWave] = useState(false);
   const [loadingPct, setLoadingPct] = useState<number | null>(null);
 
-  // ✅ md 이하(<= 767px)에서는 region drag/resize 비활성화
-  const [isMdDown, setIsMdDown] = useState(false);
+  // ✅ 터치 기반 감지: (hover none) 또는 (pointer coarse)면 region drag/resize 비활성화
+  const [isTouchLike, setIsTouchLike] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(max-width: 767px)");
-    const onChange = () => setIsMdDown(mql.matches);
+
+    // 터치/펜 환경에 더 잘 맞는 기준
+    const mql = window.matchMedia("(hover: none), (pointer: coarse)");
+    const onChange = () => setIsTouchLike(mql.matches);
     onChange();
 
     if (mql.addEventListener) mql.addEventListener("change", onChange);
@@ -154,7 +156,7 @@ export default function Waveform() {
     }
   };
 
-  // ✅ md 이하 전환 시 이미 존재하는 region drag/resize 즉시 반영
+  // ✅ 터치 환경 전환 시 이미 존재하는 region drag/resize 즉시 반영
   const syncRegionInteractivity = () => {
     const regions = regionsRef.current;
     if (!regions) return;
@@ -164,20 +166,18 @@ export default function Waveform() {
       if (!r) return;
 
       if (r.id === AB_REGION_ID) {
-        // AB 구간: drag/resize 모두 반영
-        if (typeof r?.setOptions === "function") r.setOptions({ drag: !isMdDown, resize: !isMdDown });
-        else if (typeof r?.update === "function") r.update({ drag: !isMdDown, resize: !isMdDown });
+        const next = { drag: !isTouchLike, resize: !isTouchLike };
+        if (typeof r?.setOptions === "function") r.setOptions(next);
+        else if (typeof r?.update === "function") r.update(next);
         return;
       }
 
       if (r.id === MARK_A_ID || r.id === MARK_B_ID) {
-        // 마커: resize는 원래 false, drag만 반영
-        if (typeof r?.setOptions === "function") r.setOptions({ drag: !isMdDown, resize: false });
-        else if (typeof r?.update === "function") r.update({ drag: !isMdDown, resize: false });
+        const next = { drag: !isTouchLike, resize: false };
+        if (typeof r?.setOptions === "function") r.setOptions(next);
+        else if (typeof r?.update === "function") r.update(next);
         return;
       }
-
-      // RB_TMP_ID 등은 그대로 둠
     });
   };
 
@@ -221,8 +221,8 @@ export default function Waveform() {
           id: AB_REGION_ID,
           start: a,
           end: b,
-          drag: !isMdDown, // ✅ md 이하 비활성화
-          resize: !isMdDown, // ✅ md 이하 비활성화
+          drag: !isTouchLike,
+          resize: !isTouchLike,
           color: enabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
         });
         return;
@@ -235,7 +235,7 @@ export default function Waveform() {
         id: MARK_A_ID,
         start,
         end: start + EPS,
-        drag: !isMdDown, // ✅ md 이하 비활성화
+        drag: !isTouchLike,
         resize: false,
         color: "rgba(245, 158, 11, 0.22)",
       });
@@ -248,7 +248,7 @@ export default function Waveform() {
         id: MARK_B_ID,
         start,
         end: start + EPS,
-        drag: !isMdDown, // ✅ md 이하 비활성화
+        drag: !isTouchLike,
         resize: false,
         color: "rgba(244, 63, 94, 0.22)",
       });
@@ -305,7 +305,7 @@ export default function Waveform() {
       setIsLoadingWave(false);
       setLoadingPct(null);
 
-      // ✅ ready 시 현재 뷰포트에 맞게 drag/resize 동기화
+      // ✅ ready 시에도 현재 입력 방식에 맞게 interactivity 동기화
       syncRegionInteractivity();
     });
 
@@ -634,13 +634,13 @@ export default function Waveform() {
       setWs(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isTouchLike]); // ✅ isTouchLike에 따라 interactivity가 달라지므로 의존
 
-  // ✅ md 이하/이상 전환 시 기존 region drag/resize를 즉시 반영
+  // ✅ 터치 환경 전환 시 기존 region drag/resize를 즉시 반영
   useEffect(() => {
     syncRegionInteractivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMdDown]);
+  }, [isTouchLike]);
 
   // load audio
   useEffect(() => {
@@ -700,8 +700,8 @@ export default function Waveform() {
           id: AB_REGION_ID,
           start: a,
           end: b,
-          drag: !isMdDown, // ✅ md 이하 비활성화
-          resize: !isMdDown, // ✅ md 이하 비활성화
+          drag: !isTouchLike,
+          resize: !isTouchLike,
           color: loopEnabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
         });
         return;
@@ -714,7 +714,7 @@ export default function Waveform() {
         id: MARK_A_ID,
         start,
         end: start + EPS,
-        drag: !isMdDown, // ✅ md 이하 비활성화
+        drag: !isTouchLike,
         resize: false,
         color: "rgba(245, 158, 11, 0.22)",
       });
@@ -727,13 +727,13 @@ export default function Waveform() {
         id: MARK_B_ID,
         start,
         end: start + EPS,
-        drag: !isMdDown, // ✅ md 이하 비활성화
+        drag: !isTouchLike,
         resize: false,
         color: "rgba(244, 63, 94, 0.22)",
       });
       return;
     }
-  }, [loopA, loopB, loopEnabled, isMdDown]);
+  }, [loopA, loopB, loopEnabled, isTouchLike]);
 
   // ✅ 칩 클릭 시 seek 위치 결정(AB일 때는 min/max 사용)
   const seekToA = () => {
@@ -801,7 +801,7 @@ export default function Waveform() {
 
           <div className="text-[11px] text-zinc-500">
             좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간 초기화 · 스냅 0.01s
-            {isMdDown ? " · (모바일: 구간 이동/리사이즈 비활성화)" : ""}
+            {isTouchLike ? " · (터치 환경: 구간 이동/리사이즈 비활성화)" : ""}
           </div>
         </div>
       </div>
