@@ -40,6 +40,10 @@ export default function Waveform() {
   const loopGuardRef = useRef(false);
   const fadeRafRef = useRef<number | null>(null);
 
+  // ✅ repeatCount가 +2 되는 문제 방지용: “루프 재시작이 완료될 때까지” guard 유지
+  // (t가 다시 B 이전으로 돌아왔고, 재생 중인 것이 확인되면 guard 해제)
+  const loopPendingRef = useRef<{ b: number } | null>(null);
+
   // ✅ region-updated에서 우리가 setOptions로 다시 보정할 때 무한루프 방지
   const snapApplyingRef = useRef(false);
 
@@ -59,7 +63,6 @@ export default function Waveform() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // 터치/펜 환경에 더 잘 맞는 기준
     const mql = window.matchMedia("(hover: none), (pointer: coarse)");
     const onChange = () => setIsTouchLike(mql.matches);
     onChange();
@@ -183,7 +186,6 @@ export default function Waveform() {
 
   // ✅ ESC로 구간 초기화(스토어 + UI)
   const resetLoopAll = () => {
-    // 우클릭 드래그 중이면 임시 선택도 제거
     rbSelectingRef.current = false;
     rbPointerIdRef.current = null;
 
@@ -192,10 +194,12 @@ export default function Waveform() {
     } catch {}
     rbTmpRegionRef.current = null;
 
-    // UI regions 제거
     clearAllRegions();
 
-    // store 값 초기화
+    // ✅ 반복 가드 상태도 같이 초기화
+    loopPendingRef.current = null;
+    loopGuardRef.current = false;
+
     setLoopEnabled(false);
     setLoopA(null);
     setLoopB(null);
@@ -287,7 +291,6 @@ export default function Waveform() {
     regionsRef.current = regions;
     setWs(ws);
 
-    // ✅ 로딩 진행률 (0~100)
     ws.on("loading", (pct) => {
       setIsLoadingWave(true);
       setLoadingPct(typeof pct === "number" ? pct : null);
@@ -305,7 +308,6 @@ export default function Waveform() {
       setIsLoadingWave(false);
       setLoadingPct(null);
 
-      // ✅ ready 시에도 현재 입력 방식에 맞게 interactivity 동기화
       syncRegionInteractivity();
     });
 
@@ -321,8 +323,26 @@ export default function Waveform() {
       const b0 = st.loopB;
       if (!st.loopEnabled || a0 == null || b0 == null) return;
 
+      const isPlayingNow = typeof ws.isPlaying === "function" ? ws.isPlaying() : false;
+
+      // ✅ 루프 재시작 중이면:
+      // - “B 이전으로 돌아온 게 확인될 때까지” guard 유지
+      // - 그 전엔 무조건 리턴(추가 inc 방지)
+      if (loopGuardRef.current && loopPendingRef.current) {
+        const bp = loopPendingRef.current.b;
+        const EPS_BACK = 0.01;
+
+        if (isPlayingNow && t < bp - EPS_BACK) {
+          // ✅ 재생이 실제로 B 이전으로 돌아옴 → 이제 다음 루프 감지 가능
+          loopPendingRef.current = null;
+          loopGuardRef.current = false;
+        } else {
+          return;
+        }
+      }
+
       // ✅ seek(칩 클릭 등)로 timeupdate가 발생해도, "재생 중이 아닐 때"는 반복 로직을 실행하지 않음
-      if (typeof ws.isPlaying === "function" && !ws.isPlaying()) return;
+      if (!isPlayingNow) return;
 
       const a = Math.min(a0, b0);
       const b = Math.max(a0, b0);
@@ -335,7 +355,9 @@ export default function Waveform() {
           return;
         }
 
+        // ✅ 여기서부터 루프 사이클 시작: guard + pending 세팅
         loopGuardRef.current = true;
+        loopPendingRef.current = { b };
         st.incRepeatCount();
 
         const targetVol = st.volume;
@@ -349,19 +371,16 @@ export default function Waveform() {
           const ws2 = wsRef.current;
           if (!ws2) return;
 
-          ws2.setTime(jumpStart);
-
+          // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
           if (fadeMs > 0) {
             ws2.setVolume(0);
-            ws2.play();
-            rampVolume(0, targetVol, fadeMs, () => {
-              loopGuardRef.current = false;
-            });
+            (ws2 as any).play?.(jumpStart);
+            rampVolume(0, targetVol, fadeMs);
           } else {
             ws2.setVolume(targetVol);
-            ws2.play();
-            loopGuardRef.current = false;
+            (ws2 as any).play?.(jumpStart);
           }
+          // ✅ loopGuardRef 해제는 timeupdate에서 “B 이전 복귀 확인” 후 수행
         };
 
         const afterPause = () => {
@@ -634,9 +653,8 @@ export default function Waveform() {
       setWs(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTouchLike]); // ✅ isTouchLike에 따라 interactivity가 달라지므로 의존
+  }, [isTouchLike]);
 
-  // ✅ 터치 환경 전환 시 기존 region drag/resize를 즉시 반영
   useEffect(() => {
     syncRegionInteractivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -647,6 +665,10 @@ export default function Waveform() {
     const ws = wsRef.current;
     if (!ws) return;
 
+    // ✅ 오디오 변경 시 guard 상태도 초기화
+    loopPendingRef.current = null;
+    loopGuardRef.current = false;
+
     setReady(false);
     setPlaying(false);
     setDuration(0);
@@ -655,13 +677,11 @@ export default function Waveform() {
     clearAllRegions();
     cancelFade();
 
-    // ✅ 로딩 시작
     if (audioUrl) {
       setIsLoadingWave(true);
       setLoadingPct(null);
       ws.load(audioUrl);
     } else {
-      // 오디오가 없으면 로딩 오버레이 제거
       setIsLoadingWave(false);
       setLoadingPct(null);
     }
@@ -735,7 +755,6 @@ export default function Waveform() {
     }
   }, [loopA, loopB, loopEnabled, isTouchLike]);
 
-  // ✅ 칩 클릭 시 seek 위치 결정(AB일 때는 min/max 사용)
   const seekToA = () => {
     if (abText.a == null) return;
     setTime(abText.a);
@@ -747,7 +766,6 @@ export default function Waveform() {
 
   return (
     <div className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
-      {/* ✅ 로딩 오버레이 (파형/미니맵 위에) */}
       {isLoadingWave && (
         <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/70 backdrop-blur-sm">
           <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
@@ -762,7 +780,6 @@ export default function Waveform() {
         </div>
       )}
 
-      {/* Overview / Minimap */}
       <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
         <div className="mb-1 flex items-center justify-between">
           <div className="text-xs font-medium text-zinc-700">Overview</div>
@@ -771,10 +788,8 @@ export default function Waveform() {
         <div ref={minimapRef} className="w-full" />
       </div>
 
-      {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
 
-      {/* A/B 텍스트 + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-3 text-zinc-700">
