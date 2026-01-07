@@ -130,8 +130,8 @@ export const usePlayerStore = create<PlayerState>()(
       loopA: null,
       loopB: null,
 
-      // ✅ defaults 변경
-      autoPauseMs: 200, // Auto Pause: 200ms
+      // ✅ defaults
+      autoPauseMs: 0, // Auto Pause: 0ms (default)
       repeatTarget: 0, // Repeat Limit: 기본 0(무제한)
       repeatCount: 0,
 
@@ -251,7 +251,7 @@ export const usePlayerStore = create<PlayerState>()(
       partialize: (s) => ({
         playbackRate: s.playbackRate,
         volume: s.volume,
-        zoomPps: s.zoomPps, // ✅ persist
+        zoomPps: s.zoomPps,
         autoPauseMs: s.autoPauseMs,
         repeatTarget: s.repeatTarget,
         preRollSec: s.preRollSec,
