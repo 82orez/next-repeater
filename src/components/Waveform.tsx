@@ -59,7 +59,6 @@ export default function Waveform() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // 터치/펜 환경에 더 잘 맞는 기준
     const mql = window.matchMedia("(hover: none), (pointer: coarse)");
     const onChange = () => setIsTouchLike(mql.matches);
     onChange();
@@ -78,6 +77,8 @@ export default function Waveform() {
   const setPlaying = usePlayerStore((s) => s.setPlaying);
   const setDuration = usePlayerStore((s) => s.setDuration);
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime);
+
+  const duration = usePlayerStore((s) => s.duration);
 
   const setLoopA = usePlayerStore((s) => s.setLoopA);
   const setLoopB = usePlayerStore((s) => s.setLoopB);
@@ -183,7 +184,6 @@ export default function Waveform() {
 
   // ✅ ESC로 구간 초기화(스토어 + UI)
   const resetLoopAll = () => {
-    // 우클릭 드래그 중이면 임시 선택도 제거
     rbSelectingRef.current = false;
     rbPointerIdRef.current = null;
 
@@ -192,10 +192,8 @@ export default function Waveform() {
     } catch {}
     rbTmpRegionRef.current = null;
 
-    // UI regions 제거
     clearAllRegions();
 
-    // store 값 초기화
     setLoopEnabled(false);
     setLoopA(null);
     setLoopB(null);
@@ -305,7 +303,6 @@ export default function Waveform() {
       setIsLoadingWave(false);
       setLoadingPct(null);
 
-      // ✅ ready 시에도 현재 입력 방식에 맞게 interactivity 동기화
       syncRegionInteractivity();
     });
 
@@ -321,7 +318,6 @@ export default function Waveform() {
       const b0 = st.loopB;
       if (!st.loopEnabled || a0 == null || b0 == null) return;
 
-      // ✅ seek(칩 클릭 등)로 timeupdate가 발생해도, "재생 중이 아닐 때"는 반복 로직을 실행하지 않음
       if (typeof ws.isPlaying === "function" && !ws.isPlaying()) return;
 
       const a = Math.min(a0, b0);
@@ -474,8 +470,9 @@ export default function Waveform() {
       return clamped * dur;
     };
 
+    // ✅ 터치 환경에서는 롱프레스 contextmenu 동작을 굳이 막지 않음
     const onContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
+      if (!isTouchLike) e.preventDefault();
     };
 
     const onPointerDown = (e: PointerEvent) => {
@@ -634,7 +631,7 @@ export default function Waveform() {
       setWs(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTouchLike]); // ✅ isTouchLike에 따라 interactivity가 달라지므로 의존
+  }, [isTouchLike]);
 
   // ✅ 터치 환경 전환 시 기존 region drag/resize를 즉시 반영
   useEffect(() => {
@@ -655,13 +652,11 @@ export default function Waveform() {
     clearAllRegions();
     cancelFade();
 
-    // ✅ 로딩 시작
     if (audioUrl) {
       setIsLoadingWave(true);
       setLoadingPct(null);
       ws.load(audioUrl);
     } else {
-      // 오디오가 없으면 로딩 오버레이 제거
       setIsLoadingWave(false);
       setLoadingPct(null);
     }
@@ -745,6 +740,149 @@ export default function Waveform() {
     setTime(abText.b);
   };
 
+  // =====================================================================================
+  // ✅ (NEW) 터치 전용: 파형 아래 A/B 드래그 핸들로 구간 리사이즈
+  // =====================================================================================
+  const touchTrackRef = useRef<HTMLDivElement | null>(null);
+  const touchDragRef = useRef<{ which: "A" | "B" | null; pointerId: number | null }>({ which: null, pointerId: null });
+  const [touchDragging, setTouchDragging] = useState<"A" | "B" | null>(null);
+
+  const durForTouch = Math.max(0, duration || 0);
+  const hasAnyAB = (abText.a != null || abText.b != null) && durForTouch > 0;
+
+  const timeToPct = (t: number) => {
+    if (durForTouch <= 0) return 0;
+    const p = (t / durForTouch) * 100;
+    return Math.min(100, Math.max(0, p));
+  };
+
+  const clientXToTimeOnTrack = (clientX: number) => {
+    const el = touchTrackRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const ratio = x / Math.max(1, rect.width);
+    const clamped = Math.min(1, Math.max(0, ratio));
+    return clamped * durForTouch;
+  };
+
+  const applyTouchTime = (which: "A" | "B", nextTimeRaw: number) => {
+    const dur = durForTouch;
+    if (dur <= 0) return;
+
+    const snapped = snapTime(nextTimeRaw, dur);
+
+    // ✅ A/B가 모두 있을 때는 "핸들의 정체성"이 바뀌지 않도록 A<=B로 강제
+    if (which === "A") {
+      if (abText.b != null) {
+        const maxA = Math.max(0, abText.b - SNAP_SEC);
+        const nextA = Math.min(snapped, maxA);
+        setLoopA(nextA);
+        resetRepeatCount();
+        return;
+      }
+      setLoopA(snapped);
+      resetRepeatCount();
+      return;
+    }
+
+    // which === "B"
+    if (abText.a != null) {
+      const minB = Math.min(dur, abText.a + SNAP_SEC);
+      const nextB = Math.max(snapped, minB);
+      setLoopB(nextB);
+      resetRepeatCount();
+      return;
+    }
+    setLoopB(snapped);
+    resetRepeatCount();
+  };
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const st = touchDragRef.current;
+      if (!st.which || st.pointerId == null) return;
+      if (e.pointerId !== st.pointerId) return;
+      e.preventDefault();
+
+      const t = clientXToTimeOnTrack(e.clientX);
+      applyTouchTime(st.which, t);
+    };
+
+    const onUp = (e: PointerEvent) => {
+      const st = touchDragRef.current;
+      if (!st.which || st.pointerId == null) return;
+      if (e.pointerId !== st.pointerId) return;
+      e.preventDefault();
+
+      touchDragRef.current = { which: null, pointerId: null };
+      setTouchDragging(null);
+    };
+
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp, { passive: false });
+    window.addEventListener("pointercancel", onUp, { passive: false });
+
+    return () => {
+      window.removeEventListener("pointermove", onMove as any);
+      window.removeEventListener("pointerup", onUp as any);
+      window.removeEventListener("pointercancel", onUp as any);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abText.a, abText.b, durForTouch, isLoadingWave]);
+
+  const startTouchDrag = (which: "A" | "B") => (e: React.PointerEvent) => {
+    if (!isTouchLike) return;
+    if (isLoadingWave) return;
+    if (durForTouch <= 0) return;
+
+    e.preventDefault();
+
+    touchDragRef.current = { which, pointerId: e.pointerId };
+    setTouchDragging(which);
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  // Track 탭으로도 미세 조정(가까운 핸들 이동) - UX 보너스
+  const onTouchTrackTap = (e: React.PointerEvent) => {
+    if (!isTouchLike) return;
+    if (isLoadingWave) return;
+    if (durForTouch <= 0) return;
+
+    // 드래그 중이면 무시
+    if (touchDragging) return;
+
+    const t = clientXToTimeOnTrack(e.clientX);
+
+    // ✅ A/B 둘 다 있으면 가까운 쪽을 이동
+    if (abText.a != null && abText.b != null) {
+      const da = Math.abs(t - abText.a);
+      const db = Math.abs(t - abText.b);
+      applyTouchTime(da <= db ? "A" : "B", t);
+      return;
+    }
+
+    // ✅ 하나만 있으면 그거 이동
+    if (abText.a != null) {
+      applyTouchTime("A", t);
+      return;
+    }
+    if (abText.b != null) {
+      applyTouchTime("B", t);
+      return;
+    }
+  };
+
+  // 핸들/레인지 표시용 값
+  const aPct = abText.a != null ? timeToPct(abText.a) : null;
+  const bPct = abText.b != null ? timeToPct(abText.b) : null;
+
+  const rangeLeft = abText.a != null && abText.b != null ? Math.min(aPct!, bPct!) : null;
+  const rangeRight = abText.a != null && abText.b != null ? Math.max(aPct!, bPct!) : null;
+
   return (
     <div className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
       {/* ✅ 로딩 오버레이 (파형/미니맵 위에) */}
@@ -774,6 +912,86 @@ export default function Waveform() {
       {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
 
+      {/* ✅ (NEW) 터치 전용: 파형 아래 A/B 리사이즈 핸들 */}
+      {isTouchLike && hasAnyAB && (
+        <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-semibold text-zinc-700">A/B 조절 (Touch)</div>
+            <div className="text-[11px] text-zinc-500">아래 핸들을 드래그해서 구간을 미세 조정하세요</div>
+          </div>
+
+          <div
+            ref={touchTrackRef}
+            onPointerDown={onTouchTrackTap}
+            className="relative h-10 w-full rounded-full border border-zinc-200 bg-white select-none">
+            {/* 기준 트랙 라인 */}
+            <div className="absolute top-1/2 right-2 left-2 h-1 -translate-y-1/2 rounded-full bg-zinc-200" />
+
+            {/* AB 범위 하이라이트 */}
+            {rangeLeft != null && rangeRight != null && (
+              <div
+                className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-blue-300"
+                style={{
+                  left: `calc(${rangeLeft}% + 0.5rem)`,
+                  width: `calc(${Math.max(0, rangeRight - rangeLeft)}% - 0rem)`,
+                }}
+              />
+            )}
+
+            {/* A 핸들 */}
+            {aPct != null && (
+              <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${aPct}% )` }}>
+                <button
+                  type="button"
+                  onPointerDown={startTouchDrag("A")}
+                  disabled={isLoadingWave}
+                  className={[
+                    "relative -translate-x-1/2 touch-none",
+                    "h-8 w-8 rounded-full border shadow-sm",
+                    "border-amber-200 bg-amber-50",
+                    "active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
+                    touchDragging === "A" ? "ring-2 ring-amber-300" : "",
+                  ].join(" ")}
+                  title="Drag A"
+                  style={{ touchAction: "none" }}>
+                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-amber-700">A</span>
+                </button>
+              </div>
+            )}
+
+            {/* B 핸들 */}
+            {bPct != null && (
+              <div className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${bPct}% )` }}>
+                <button
+                  type="button"
+                  onPointerDown={startTouchDrag("B")}
+                  disabled={isLoadingWave}
+                  className={[
+                    "relative -translate-x-1/2 touch-none",
+                    "h-8 w-8 rounded-full border shadow-sm",
+                    "border-rose-200 bg-rose-50",
+                    "active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
+                    touchDragging === "B" ? "ring-2 ring-rose-300" : "",
+                  ].join(" ")}
+                  title="Drag B"
+                  style={{ touchAction: "none" }}>
+                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-rose-700">B</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-600">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full bg-white px-2 py-1">A {abText.a != null ? fmtTimeCS(abText.a) : "--:--.--"}</span>
+              <span className="rounded-full bg-white px-2 py-1">B {abText.b != null ? fmtTimeCS(abText.b) : "--:--.--"}</span>
+              {abText.len != null && <span className="rounded-full bg-white px-2 py-1">LEN {fmtTimeCS(abText.len)}</span>}
+            </div>
+            <div className="text-zinc-500">탭: 가까운 핸들 이동 · 드래그: 정밀 조정 · 스냅 0.01s</div>
+          </div>
+        </div>
+      )}
+
       {/* A/B 텍스트 + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -801,7 +1019,7 @@ export default function Waveform() {
 
           <div className="text-[11px] text-zinc-500">
             좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간 초기화 · 스냅 0.01s
-            {isTouchLike ? " · (터치 환경: 구간 이동/리사이즈 비활성화)" : ""}
+            {isTouchLike ? " · (터치: 파형 아래 A/B 핸들로 구간 조절)" : ""}
           </div>
         </div>
       </div>
