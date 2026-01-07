@@ -130,12 +130,13 @@ export const usePlayerStore = create<PlayerState>()(
       loopA: null,
       loopB: null,
 
-      autoPauseMs: 0,
-      repeatTarget: 0,
+      // ✅ defaults 변경
+      autoPauseMs: 200, // Auto Pause: 200ms
+      repeatTarget: 0, // Repeat Limit: 기본 0(무제한)
       repeatCount: 0,
 
-      preRollSec: 0.15,
-      fadeMs: 120,
+      preRollSec: 0, // Pre-roll (sec): 0
+      fadeMs: 0, // Fade (ms): 0
 
       bookmarks: [],
       recent: [],
