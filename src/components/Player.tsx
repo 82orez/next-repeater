@@ -349,6 +349,27 @@ export default function Player() {
               <Flag className="h-4 w-4" /> B
             </button>
 
+            {/* Repeat Toggle */}
+            <button
+              onClick={() => {
+                if (!canLoop) return;
+                setLoopEnabled(!loopEnabled);
+                resetRepeatCount();
+              }}
+              disabled={!canLoop}
+              className={clsx(
+                "inline-flex w-[77px] items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
+                canLoop
+                  ? loopEnabled
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
+                  : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
+              )}
+              title="반복 토글 (R)">
+              <Repeat className="h-4 w-4" />
+              {loopEnabled ? "ON" : "OFF"}
+            </button>
+
             {/* Reset loop */}
             <button
               onClick={() => {
@@ -360,30 +381,7 @@ export default function Player() {
               disabled={!audioUrl}
               className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
               title="구간 초기화 (Esc)">
-              <span className="inline-flex items-center gap-2">
-                초기화 <span className="text-[11px] text-zinc-400">(Esc)</span>
-              </span>
-            </button>
-
-            {/* Repeat Toggle */}
-            <button
-              onClick={() => {
-                if (!canLoop) return;
-                setLoopEnabled(!loopEnabled);
-                resetRepeatCount();
-              }}
-              disabled={!canLoop}
-              className={clsx(
-                "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
-                canLoop
-                  ? loopEnabled
-                    ? "bg-blue-600 text-white hover:bg-blue-700"
-                    : "border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
-                  : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
-              )}
-              title="반복 토글 (R)">
-              <Repeat className="h-4 w-4" />
-              {loopEnabled ? "반복 ON" : "반복 OFF"}
+              <span className="inline-flex items-center gap-2">Reset</span>
             </button>
 
             <div className="h-8 w-px bg-zinc-200" />
