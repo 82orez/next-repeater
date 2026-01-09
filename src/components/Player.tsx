@@ -311,6 +311,19 @@ export default function Player() {
         {/* ✅ Transport: (A) - (Play/Pause) - (B) / Seek - (처음으로) - Seek */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
+            {/* Play / Pause */}
+            <button
+              onClick={playPause}
+              disabled={controlsDisabled}
+              className={clsx(
+                "inline-flex w-[90px] items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
+                controlsDisabled ? "cursor-not-allowed bg-zinc-900/50 text-white" : "bg-zinc-900 text-white hover:bg-zinc-800",
+              )}
+              title="재생/일시정지 (Space)">
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+
             {/* A */}
             <button
               onClick={() => {
@@ -321,19 +334,6 @@ export default function Player() {
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title="A 지정 (KeyA)">
               <Flag className="h-4 w-4" /> A
-            </button>
-
-            {/* Play / Pause (A와 B 사이) */}
-            <button
-              onClick={playPause}
-              disabled={controlsDisabled}
-              className={clsx(
-                "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
-                controlsDisabled ? "cursor-not-allowed bg-zinc-900/50 text-white" : "bg-zinc-900 text-white hover:bg-zinc-800",
-              )}
-              title="재생/일시정지 (Space)">
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {isPlaying ? "일시정지" : "재생"}
             </button>
 
             {/* B */}
