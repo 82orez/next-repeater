@@ -15,12 +15,6 @@ const RB_TMP_ID = "rb_tmp";
 // ✅ 스냅 간격(0.01초)
 const SNAP_SEC = 0.01;
 
-// ✅ 모바일 long-press 리사이즈
-const LONG_PRESS_MS = 420; // 길게 누름 기준
-const EDGE_HIT_PX = 18; // 가장자리 판정(px)
-const MOVE_CANCEL_PX = 8; // long-press 취소 이동량(px)
-const MIN_LOOP_LEN = 0.05; // 최소 구간 길이(초)
-
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -46,7 +40,8 @@ export default function Waveform() {
   const loopGuardRef = useRef(false);
   const fadeRafRef = useRef<number | null>(null);
 
-  // ✅ repeatCount +2 방지: “루프 재시작이 완료될 때까지” guard 유지
+  // ✅ repeatCount가 +2 되는 문제 방지용: “루프 재시작이 완료될 때까지” guard 유지
+  // (t가 다시 B 이전으로 돌아왔고, 재생 중인 것이 확인되면 guard 해제)
   const loopPendingRef = useRef<{ b: number } | null>(null);
 
   // ✅ region-updated에서 우리가 setOptions로 다시 보정할 때 무한루프 방지
@@ -63,7 +58,7 @@ export default function Waveform() {
   const [isLoadingWave, setIsLoadingWave] = useState(false);
   const [loadingPct, setLoadingPct] = useState<number | null>(null);
 
-  // ✅ 터치 기반 감지: (hover none) 또는 (pointer coarse)
+  // ✅ 터치 기반 감지: (hover none) 또는 (pointer coarse)면 region drag/resize 비활성화
   const [isTouchLike, setIsTouchLike] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -80,16 +75,6 @@ export default function Waveform() {
       else mql.removeListener(onChange);
     };
   }, []);
-
-  // ✅ 모바일 long-press 리사이즈 상태
-  const lpTimerRef = useRef<number | null>(null);
-  const lpStartClientRef = useRef<{ x: number; y: number } | null>(null);
-  const touchResizeRef = useRef<{
-    active: boolean;
-    pointerId: number | null;
-    side: "start" | "end" | null;
-    region: any | null;
-  }>({ active: false, pointerId: null, side: null, region: null });
 
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
@@ -174,9 +159,7 @@ export default function Waveform() {
     }
   };
 
-  // ✅ 터치 환경 전환 시 기존 region drag/resize 즉시 반영
-  // - 모바일: drag 항상 금지
-  // - 모바일: 기본 resize도 금지(우리는 long-press로만 직접 리사이즈)
+  // ✅ 터치 환경 전환 시 이미 존재하는 region drag/resize 즉시 반영
   const syncRegionInteractivity = () => {
     const regions = regionsRef.current;
     if (!regions) return;
@@ -186,14 +169,14 @@ export default function Waveform() {
       if (!r) return;
 
       if (r.id === AB_REGION_ID) {
-        const next = isTouchLike ? { drag: false, resize: false } : { drag: true, resize: true };
+        const next = { drag: !isTouchLike, resize: !isTouchLike };
         if (typeof r?.setOptions === "function") r.setOptions(next);
         else if (typeof r?.update === "function") r.update(next);
         return;
       }
 
       if (r.id === MARK_A_ID || r.id === MARK_B_ID) {
-        const next = isTouchLike ? { drag: false, resize: false } : { drag: true, resize: false };
+        const next = { drag: !isTouchLike, resize: false };
         if (typeof r?.setOptions === "function") r.setOptions(next);
         else if (typeof r?.update === "function") r.update(next);
         return;
@@ -206,14 +189,6 @@ export default function Waveform() {
     rbSelectingRef.current = false;
     rbPointerIdRef.current = null;
 
-    // 모바일 리사이즈/롱프레스도 취소
-    touchResizeRef.current = { active: false, pointerId: null, side: null, region: null };
-    if (lpTimerRef.current) {
-      window.clearTimeout(lpTimerRef.current);
-      lpTimerRef.current = null;
-    }
-    lpStartClientRef.current = null;
-
     try {
       rbTmpRegionRef.current?.remove?.();
     } catch {}
@@ -221,6 +196,7 @@ export default function Waveform() {
 
     clearAllRegions();
 
+    // ✅ 반복 가드 상태도 같이 초기화
     loopPendingRef.current = null;
     loopGuardRef.current = false;
 
@@ -249,8 +225,8 @@ export default function Waveform() {
           id: AB_REGION_ID,
           start: a,
           end: b,
-          drag: isTouchLike ? false : true,
-          resize: isTouchLike ? false : true,
+          drag: !isTouchLike,
+          resize: !isTouchLike,
           color: enabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
         });
         return;
@@ -263,7 +239,7 @@ export default function Waveform() {
         id: MARK_A_ID,
         start,
         end: start + EPS,
-        drag: isTouchLike ? false : true,
+        drag: !isTouchLike,
         resize: false,
         color: "rgba(245, 158, 11, 0.22)",
       });
@@ -276,7 +252,7 @@ export default function Waveform() {
         id: MARK_B_ID,
         start,
         end: start + EPS,
-        drag: isTouchLike ? false : true,
+        drag: !isTouchLike,
         resize: false,
         color: "rgba(244, 63, 94, 0.22)",
       });
@@ -349,11 +325,15 @@ export default function Waveform() {
 
       const isPlayingNow = typeof ws.isPlaying === "function" ? ws.isPlaying() : false;
 
+      // ✅ 루프 재시작 중이면:
+      // - “B 이전으로 돌아온 게 확인될 때까지” guard 유지
+      // - 그 전엔 무조건 리턴(추가 inc 방지)
       if (loopGuardRef.current && loopPendingRef.current) {
         const bp = loopPendingRef.current.b;
         const EPS_BACK = 0.01;
 
         if (isPlayingNow && t < bp - EPS_BACK) {
+          // ✅ 재생이 실제로 B 이전으로 돌아옴 → 이제 다음 루프 감지 가능
           loopPendingRef.current = null;
           loopGuardRef.current = false;
         } else {
@@ -361,6 +341,7 @@ export default function Waveform() {
         }
       }
 
+      // ✅ seek(칩 클릭 등)로 timeupdate가 발생해도, "재생 중이 아닐 때"는 반복 로직을 실행하지 않음
       if (!isPlayingNow) return;
 
       const a = Math.min(a0, b0);
@@ -374,6 +355,7 @@ export default function Waveform() {
           return;
         }
 
+        // ✅ 여기서부터 루프 사이클 시작: guard + pending 세팅
         loopGuardRef.current = true;
         loopPendingRef.current = { b };
         st.incRepeatCount();
@@ -389,6 +371,7 @@ export default function Waveform() {
           const ws2 = wsRef.current;
           if (!ws2) return;
 
+          // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
           if (fadeMs > 0) {
             ws2.setVolume(0);
             (ws2 as any).play?.(jumpStart);
@@ -397,6 +380,7 @@ export default function Waveform() {
             ws2.setVolume(targetVol);
             (ws2 as any).play?.(jumpStart);
           }
+          // ✅ loopGuardRef 해제는 timeupdate에서 “B 이전 복귀 확인” 후 수행
         };
 
         const afterPause = () => {
@@ -447,7 +431,6 @@ export default function Waveform() {
 
     // AB/마커 업데이트 + 스냅(0.01s)
     regions.on("region-updated", (r: any) => {
-      // ✅ 모바일은 기본 resize/drag를 막아두므로, 여기서 들어오는 건 (데스크톱) 위주
       if (r.id === RB_TMP_ID) return;
       if (snapApplyingRef.current) return;
 
@@ -499,12 +482,8 @@ export default function Waveform() {
       }
     });
 
-    // ---- Pointer controls (우클릭 드래그 + 모바일 long-press 리사이즈 + zoom) ----
+    // 우클릭 드래그(A–B 선택)
     const wrapperEl: HTMLElement = ((ws as any).getWrapper?.() as HTMLElement) || containerRef.current!;
-    // 스크롤 UX 위해 기본은 pan-y
-    try {
-      (wrapperEl.style as any).touchAction = "pan-y";
-    } catch {}
 
     const xToTime = (clientX: number) => {
       const rect = wrapperEl.getBoundingClientRect();
@@ -518,213 +497,61 @@ export default function Waveform() {
       e.preventDefault();
     };
 
-    const clearLongPressTimer = () => {
-      if (lpTimerRef.current) {
-        window.clearTimeout(lpTimerRef.current);
-        lpTimerRef.current = null;
-      }
-    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 2) return;
 
-    const startMobileLongPressResize = (e: PointerEvent) => {
-      // ✅ 터치 환경에서만
-      if (!isTouchLike) return;
-      // 좌클릭(터치)만
-      if (e.button !== 0) return;
-      // 오디오/구간 없으면 리사이즈 불가
-      const st = usePlayerStore.getState();
-      if (st.loopA == null || st.loopB == null) return;
-
-      const ws2 = wsRef.current;
-      const regs = regionsRef.current;
-      if (!ws2 || !regs) return;
-
-      const dur = ws2.getDuration() || 0;
+      const dur = ws.getDuration() || 0;
       if (dur <= 0) return;
 
-      const region = regs.getRegions()?.[AB_REGION_ID];
-      if (!region) return;
+      e.preventDefault();
 
-      const rect = wrapperEl.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const width = Math.max(1, rect.width);
+      rbSelectingRef.current = true;
+      rbPointerIdRef.current = e.pointerId;
 
-      const a = Math.min(st.loopA, st.loopB);
-      const b = Math.max(st.loopA, st.loopB);
+      try {
+        wrapperEl.setPointerCapture(e.pointerId);
+      } catch {}
 
-      const ax = (a / dur) * width;
-      const bx = (b / dur) * width;
+      const t0 = xToTime(e.clientX);
+      rbStartTimeRef.current = t0;
+      rbLastTimeRef.current = t0;
 
-      // 가장자리 근처인지 판정
-      const nearStart = Math.abs(px - ax) <= EDGE_HIT_PX;
-      const nearEnd = Math.abs(px - bx) <= EDGE_HIT_PX;
-      if (!nearStart && !nearEnd) return;
+      clearAllRegions();
 
-      const side: "start" | "end" = nearStart && nearEnd ? (Math.abs(px - ax) <= Math.abs(px - bx) ? "start" : "end") : nearStart ? "start" : "end";
-
-      lpStartClientRef.current = { x: e.clientX, y: e.clientY };
-      clearLongPressTimer();
-
-      lpTimerRef.current = window.setTimeout(() => {
-        // long press 발동 -> 우리가 직접 리사이즈 모드로 진입
-        touchResizeRef.current = {
-          active: true,
-          pointerId: e.pointerId,
-          side,
-          region,
-        };
-
-        // 스크롤 방지 + 포인터 캡처
-        try {
-          e.preventDefault();
-        } catch {}
-        try {
-          wrapperEl.setPointerCapture(e.pointerId);
-        } catch {}
-      }, LONG_PRESS_MS);
-    };
-
-    const onPointerDown = (e: PointerEvent) => {
-      // ✅ 우클릭 드래그(A–B 선택): 데스크톱/마우스 기준
-      if (e.button === 2) {
-        const dur = ws.getDuration() || 0;
-        if (dur <= 0) return;
-
-        e.preventDefault();
-
-        rbSelectingRef.current = true;
-        rbPointerIdRef.current = e.pointerId;
-
-        try {
-          wrapperEl.setPointerCapture(e.pointerId);
-        } catch {}
-
-        const t0 = xToTime(e.clientX);
-        rbStartTimeRef.current = t0;
-        rbLastTimeRef.current = t0;
-
-        clearAllRegions();
-
-        const t1 = Math.min(dur, t0 + 0.01);
-        const tmp = regions.addRegion({
-          id: RB_TMP_ID,
-          start: t0,
-          end: t1,
-          drag: false,
-          resize: false,
-          color: "rgba(168, 85, 247, 0.18)",
-        });
-        rbTmpRegionRef.current = tmp;
-
-        return;
-      }
-
-      // ✅ 모바일: long-press로만 AB 리사이즈 허용(드래그는 계속 금지)
-      startMobileLongPressResize(e);
+      const t1 = Math.min(dur, t0 + 0.01);
+      const tmp = regions.addRegion({
+        id: RB_TMP_ID,
+        start: t0,
+        end: t1,
+        drag: false,
+        resize: false,
+        color: "rgba(168, 85, 247, 0.18)",
+      });
+      rbTmpRegionRef.current = tmp;
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      // ---- 우클릭 드래그 선택 ----
-      if (rbSelectingRef.current) {
-        if (rbPointerIdRef.current !== e.pointerId) return;
-        e.preventDefault();
+      if (!rbSelectingRef.current) return;
+      if (rbPointerIdRef.current !== e.pointerId) return;
 
-        const dur = ws.getDuration() || 0;
-        if (dur <= 0) return;
+      e.preventDefault();
 
-        const t = xToTime(e.clientX);
-        rbLastTimeRef.current = t;
+      const dur = ws.getDuration() || 0;
+      if (dur <= 0) return;
 
-        const a = Math.min(rbStartTimeRef.current, t);
-        const b = Math.max(rbStartTimeRef.current, t);
+      const t = xToTime(e.clientX);
+      rbLastTimeRef.current = t;
 
-        const tmp = rbTmpRegionRef.current;
-        if (!tmp) return;
+      const a = Math.min(rbStartTimeRef.current, t);
+      const b = Math.max(rbStartTimeRef.current, t);
 
-        setRegionTimes(tmp, a, b);
-        return;
-      }
+      const tmp = rbTmpRegionRef.current;
+      if (!tmp) return;
 
-      // ---- 모바일 long-press 대기 중: 이동하면 취소 ----
-      if (isTouchLike && lpTimerRef.current && lpStartClientRef.current) {
-        const dx = e.clientX - lpStartClientRef.current.x;
-        const dy = e.clientY - lpStartClientRef.current.y;
-        if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) {
-          clearLongPressTimer();
-          lpStartClientRef.current = null;
-        }
-      }
-
-      // ---- 모바일 리사이즈 진행 중 ----
-      if (isTouchLike && touchResizeRef.current.active) {
-        if (touchResizeRef.current.pointerId !== e.pointerId) return;
-
-        e.preventDefault();
-
-        const ws2 = wsRef.current;
-        const st = usePlayerStore.getState();
-        const dur = ws2?.getDuration() || 0;
-        if (!ws2 || dur <= 0) return;
-
-        const a0 = st.loopA;
-        const b0 = st.loopB;
-        if (a0 == null || b0 == null) return;
-
-        const curA = Math.min(a0, b0);
-        const curB = Math.max(a0, b0);
-
-        const t0 = snapTime(xToTime(e.clientX), dur);
-
-        let nextA = curA;
-        let nextB = curB;
-
-        if (touchResizeRef.current.side === "start") {
-          nextA = Math.min(t0, curB - MIN_LOOP_LEN);
-        } else if (touchResizeRef.current.side === "end") {
-          nextB = Math.max(t0, curA + MIN_LOOP_LEN);
-        } else {
-          return;
-        }
-
-        // region을 직접 업데이트(깜빡임 방지)
-        const r = touchResizeRef.current.region;
-        if (r) {
-          setRegionTimes(r, nextA, nextB);
-        }
-
-        // 스토어도 업데이트(칩 텍스트 즉시 반영)
-        st.setLoopRange(nextA, nextB);
-
-        return;
-      }
+      setRegionTimes(tmp, a, b);
     };
 
     const finishRightDrag = (e: PointerEvent) => {
-      // ---- 모바일 리사이즈 종료 ----
-      if (isTouchLike && touchResizeRef.current.active) {
-        if (touchResizeRef.current.pointerId !== e.pointerId) return;
-
-        e.preventDefault();
-
-        touchResizeRef.current = { active: false, pointerId: null, side: null, region: null };
-        lpStartClientRef.current = null;
-        clearLongPressTimer();
-
-        try {
-          wrapperEl.releasePointerCapture(e.pointerId);
-        } catch {}
-
-        // 조정 완료 → 반복 카운트 reset
-        resetRepeatCount();
-        return;
-      }
-
-      // ---- long-press 대기만 하다가 끝나면 타이머 정리 ----
-      if (isTouchLike) {
-        clearLongPressTimer();
-        lpStartClientRef.current = null;
-      }
-
-      // ---- 우클릭 드래그 종료 ----
       if (!rbSelectingRef.current) return;
       if (rbPointerIdRef.current !== e.pointerId) return;
 
@@ -791,7 +618,7 @@ export default function Waveform() {
       const st = usePlayerStore.getState();
       const hasLoop = st.loopA != null || st.loopB != null || st.loopEnabled;
 
-      if (!hasLoop && !rbSelectingRef.current && !touchResizeRef.current.active) return;
+      if (!hasLoop && !rbSelectingRef.current) return;
 
       e.preventDefault();
       resetLoopAll();
@@ -812,8 +639,6 @@ export default function Waveform() {
         loopTimerRef.current = null;
       }
 
-      clearLongPressTimer();
-
       wrapperEl.removeEventListener("contextmenu", onContextMenu);
       wrapperEl.removeEventListener("pointerdown", onPointerDown);
       wrapperEl.removeEventListener("pointermove", onPointerMove);
@@ -830,7 +655,6 @@ export default function Waveform() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTouchLike]);
 
-  // ✅ 터치 환경 전환 시 기존 region drag/resize를 즉시 반영
   useEffect(() => {
     syncRegionInteractivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -841,16 +665,9 @@ export default function Waveform() {
     const ws = wsRef.current;
     if (!ws) return;
 
+    // ✅ 오디오 변경 시 guard 상태도 초기화
     loopPendingRef.current = null;
     loopGuardRef.current = false;
-
-    // 모바일 리사이즈 상태도 리셋
-    touchResizeRef.current = { active: false, pointerId: null, side: null, region: null };
-    if (lpTimerRef.current) {
-      window.clearTimeout(lpTimerRef.current);
-      lpTimerRef.current = null;
-    }
-    lpStartClientRef.current = null;
 
     setReady(false);
     setPlaying(false);
@@ -886,8 +703,6 @@ export default function Waveform() {
     if (!regions || !ws) return;
 
     if (rbSelectingRef.current) return;
-    // ✅ 모바일 리사이즈 진행 중이면, clear/add로 깜빡이지 않도록 건너뜀
-    if (touchResizeRef.current.active) return;
 
     clearAllRegions();
 
@@ -905,8 +720,8 @@ export default function Waveform() {
           id: AB_REGION_ID,
           start: a,
           end: b,
-          drag: isTouchLike ? false : true, // ✅ 모바일 drag 금지
-          resize: isTouchLike ? false : true, // ✅ 모바일 기본 resize 금지(롱프레스만)
+          drag: !isTouchLike,
+          resize: !isTouchLike,
           color: loopEnabled ? "rgba(59, 130, 246, 0.18)" : "rgba(113, 113, 122, 0.14)",
         });
         return;
@@ -919,7 +734,7 @@ export default function Waveform() {
         id: MARK_A_ID,
         start,
         end: start + EPS,
-        drag: isTouchLike ? false : true,
+        drag: !isTouchLike,
         resize: false,
         color: "rgba(245, 158, 11, 0.22)",
       });
@@ -932,7 +747,7 @@ export default function Waveform() {
         id: MARK_B_ID,
         start,
         end: start + EPS,
-        drag: isTouchLike ? false : true,
+        drag: !isTouchLike,
         resize: false,
         color: "rgba(244, 63, 94, 0.22)",
       });
@@ -940,7 +755,6 @@ export default function Waveform() {
     }
   }, [loopA, loopB, loopEnabled, isTouchLike]);
 
-  // ✅ 칩 클릭 시 seek
   const seekToA = () => {
     if (abText.a == null) return;
     setTime(abText.a);
@@ -952,7 +766,6 @@ export default function Waveform() {
 
   return (
     <div className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
-      {/* ✅ 로딩 오버레이 */}
       {isLoadingWave && (
         <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/70 backdrop-blur-sm">
           <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
@@ -967,7 +780,6 @@ export default function Waveform() {
         </div>
       )}
 
-      {/* Overview / Minimap */}
       <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
         <div className="mb-1 flex items-center justify-between">
           <div className="text-xs font-medium text-zinc-700">Overview</div>
@@ -976,10 +788,8 @@ export default function Waveform() {
         <div ref={minimapRef} className="w-full" />
       </div>
 
-      {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
 
-      {/* A/B 텍스트 + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-3 text-zinc-700">
@@ -1006,7 +816,7 @@ export default function Waveform() {
 
           <div className="text-[11px] text-zinc-500">
             좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간 초기화 · 스냅 0.01s
-            {isTouchLike ? " · (터치: 구간 이동 금지 · 구간 끝을 길게 눌러 리사이즈)" : ""}
+            {isTouchLike ? " · (터치 환경: 구간 이동/리사이즈 비활성화)" : ""}
           </div>
         </div>
       </div>
