@@ -41,7 +41,6 @@ export default function Waveform() {
   const fadeRafRef = useRef<number | null>(null);
 
   // ✅ repeatCount가 +2 되는 문제 방지용: “루프 재시작이 완료될 때까지” guard 유지
-  // (t가 다시 B 이전으로 돌아왔고, 재생 중인 것이 확인되면 guard 해제)
   const loopPendingRef = useRef<{ b: number } | null>(null);
 
   // ✅ region-updated에서 우리가 setOptions로 다시 보정할 때 무한루프 방지
@@ -75,6 +74,9 @@ export default function Waveform() {
       else mql.removeListener(onChange);
     };
   }, []);
+
+  // ✅ "Loop OFF + AB 존재" 상태에서: 재생 시작 시 A로 강제 이동(1회 재생 UX)
+  const oneShotAdjustingRef = useRef(false);
 
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
@@ -311,7 +313,40 @@ export default function Waveform() {
       syncRegionInteractivity();
     });
 
-    ws.on("play", () => setPlaying(true));
+    // ✅ "Loop OFF + AB 존재"면, 재생 시작 시 항상 A부터 시작
+    ws.on("play", () => {
+      setPlaying(true);
+
+      const st = usePlayerStore.getState();
+      const a0 = st.loopA;
+      const b0 = st.loopB;
+
+      if (st.loopEnabled) return;
+      if (a0 == null || b0 == null) return;
+
+      const a = Math.min(a0, b0);
+      const b = Math.max(a0, b0);
+      if (b <= a) return;
+
+      if (oneShotAdjustingRef.current) return;
+      oneShotAdjustingRef.current = true;
+
+      // play 이벤트는 "이미 play()"가 호출된 직후라 seek 레이스가 생길 수 있어서,
+      // 다음 tick에 play(a)로 확실히 A부터 시작하도록 강제
+      queueMicrotask(() => {
+        const ws2 = wsRef.current;
+        if (!ws2) {
+          oneShotAdjustingRef.current = false;
+          return;
+        }
+        (ws2 as any).play?.(a);
+        // 너무 오래 잡고 있진 않도록 빠르게 해제
+        window.setTimeout(() => {
+          oneShotAdjustingRef.current = false;
+        }, 0);
+      });
+    });
+
     ws.on("pause", () => setPlaying(false));
     ws.on("finish", () => setPlaying(false));
 
@@ -321,9 +356,35 @@ export default function Waveform() {
       const st = usePlayerStore.getState();
       const a0 = st.loopA;
       const b0 = st.loopB;
-      if (!st.loopEnabled || a0 == null || b0 == null) return;
 
       const isPlayingNow = typeof ws.isPlaying === "function" ? ws.isPlaying() : false;
+
+      // ✅ (1) Loop OFF + AB 설정됨 => "1회 재생 모드"
+      if (!st.loopEnabled && a0 != null && b0 != null) {
+        // 기존 루프 가드가 남아있을 수 있으니, one-shot에서는 정리
+        if (loopGuardRef.current || loopPendingRef.current) {
+          loopGuardRef.current = false;
+          loopPendingRef.current = null;
+        }
+
+        if (!isPlayingNow) return;
+
+        const a = Math.min(a0, b0);
+        const b = Math.max(a0, b0);
+        if (b <= a) return;
+
+        const EPS_END = 0.01;
+        if (t >= b - EPS_END) {
+          // ✅ B에 도달하면 정지 + 다음 재생을 위해 A로 되돌려두기(정지 상태)
+          ws.pause();
+          ws.setTime(a);
+          setCurrentTime(a);
+        }
+        return; // ✅ one-shot에서는 아래 반복 로직으로 내려가지 않음
+      }
+
+      // ✅ (2) Loop ON일 때만 반복 로직 실행
+      if (!st.loopEnabled || a0 == null || b0 == null) return;
 
       // ✅ 루프 재시작 중이면:
       // - “B 이전으로 돌아온 게 확인될 때까지” guard 유지
@@ -333,7 +394,6 @@ export default function Waveform() {
         const EPS_BACK = 0.01;
 
         if (isPlayingNow && t < bp - EPS_BACK) {
-          // ✅ 재생이 실제로 B 이전으로 돌아옴 → 이제 다음 루프 감지 가능
           loopPendingRef.current = null;
           loopGuardRef.current = false;
         } else {
@@ -668,6 +728,7 @@ export default function Waveform() {
     // ✅ 오디오 변경 시 guard 상태도 초기화
     loopPendingRef.current = null;
     loopGuardRef.current = false;
+    oneShotAdjustingRef.current = false;
 
     setReady(false);
     setPlaying(false);
@@ -755,6 +816,7 @@ export default function Waveform() {
     }
   }, [loopA, loopB, loopEnabled, isTouchLike]);
 
+  // ✅ 칩 클릭 시 seek 위치 결정(AB일 때는 min/max 사용)
   const seekToA = () => {
     if (abText.a == null) return;
     setTime(abText.a);
@@ -766,6 +828,7 @@ export default function Waveform() {
 
   return (
     <div className="relative w-full rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+      {/* ✅ 로딩 오버레이 (파형/미니맵 위에) */}
       {isLoadingWave && (
         <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/70 backdrop-blur-sm">
           <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
@@ -780,6 +843,7 @@ export default function Waveform() {
         </div>
       )}
 
+      {/* Overview / Minimap */}
       <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
         <div className="mb-1 flex items-center justify-between">
           <div className="text-xs font-medium text-zinc-700">Overview</div>
@@ -788,8 +852,10 @@ export default function Waveform() {
         <div ref={minimapRef} className="w-full" />
       </div>
 
+      {/* Main waveform */}
       <div ref={containerRef} className="w-full" />
 
+      {/* A/B 텍스트 + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-3 text-zinc-700">
@@ -817,6 +883,7 @@ export default function Waveform() {
           <div className="text-[11px] text-zinc-500">
             좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간 초기화 · 스냅 0.01s
             {isTouchLike ? " · (터치 환경: 구간 이동/리사이즈 비활성화)" : ""}
+            {abText.a != null && abText.b != null && !loopEnabled ? " · (Loop OFF: A→B 1회 재생 모드)" : ""}
           </div>
         </div>
       </div>
