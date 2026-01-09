@@ -169,7 +169,20 @@ export default function Player() {
         setLoopEnabled(true);
         return;
       }
+
+      // ✅ Repeat toggle: r/R (기존 L은 유지하고 싶으면 아래 KeyL 블록도 남겨두면 됩니다)
+      if (ev.code === "KeyR") {
+        if (!canLoop) return;
+        ev.preventDefault();
+        setLoopEnabled(!loopEnabled);
+        resetRepeatCount();
+        return;
+      }
+
+      // (선택) 기존 L 단축키 유지
       if (ev.code === "KeyL") {
+        if (!canLoop) return;
+        ev.preventDefault();
         setLoopEnabled(!loopEnabled);
         resetRepeatCount();
         return;
@@ -191,6 +204,7 @@ export default function Player() {
     return () => window.removeEventListener("keydown", onKey);
   }, [
     audioUrl,
+    canLoop,
     currentTime,
     loopEnabled,
     playbackRate,
@@ -367,7 +381,7 @@ export default function Player() {
                     : "border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
                   : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
               )}
-              title="반복 토글 (KeyL)">
+              title="반복 토글 (R)">
               <Repeat className="h-4 w-4" />
               {loopEnabled ? "반복 ON" : "반복 OFF"}
             </button>
@@ -560,7 +574,7 @@ export default function Player() {
                   <b>←/→</b>: 3초 이동, <b>Shift+←/→</b>: 10초 이동
                 </li>
                 <li>
-                  <b>A</b>: A 지정, <b>B</b>: B 지정, <b>L</b>: 반복 토글
+                  <b>A</b>: A 지정, <b>B</b>: B 지정, <b>R</b>: 반복 토글 (L도 지원)
                 </li>
                 <li>
                   <b>↑/↓</b>: 속도 ±0.05
