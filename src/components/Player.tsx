@@ -566,7 +566,16 @@ export default function Player() {
               <div className="font-medium text-zinc-800">단축키</div>
               <ul className="mt-2 list-disc pl-5">
                 <li>
+                  <b>좌클릭:</b> 탐색
+                </li>
+                <li>
                   <b>Space</b>: 재생/일시정지
+                </li>
+                <li>
+                  <b>우클릭 드래그</b>: 구간 설정
+                </li>
+                <li>
+                  <b>ESC</b>: 구간 초기화
                 </li>
                 <li>
                   <b>←/→</b>: 3초 이동, <b>Shift+←/→</b>: 10초 이동
@@ -579,6 +588,9 @@ export default function Player() {
                 </li>
                 <li>
                   <b>Ctrl/⌘ + 휠</b>: 줌, <b>Ctrl/⌘ +/−/0</b>: 줌 조절/리셋
+                </li>
+                <li>
+                  <b>Loop OFF:</b> A→B 1회 재생 모드
                 </li>
               </ul>
             </div>

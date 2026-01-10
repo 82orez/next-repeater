@@ -847,7 +847,7 @@ export default function Waveform() {
       <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
         <div className="mb-1 flex items-center justify-between">
           <div className="text-xs font-medium text-zinc-700">Overview</div>
-          <div className="text-[11px] text-zinc-500">클릭/드래그로 이동 · 확대 시 뷰포트 표시</div>
+          <div className="hidden text-[11px] text-zinc-500 md:block">현재 뷰포트 표시 / 클릭으로 탐색</div>
         </div>
         <div ref={minimapRef} className="w-full" />
       </div>
@@ -878,12 +878,6 @@ export default function Waveform() {
             </button>
 
             {abText.len != null && <span className="rounded-full bg-blue-50 px-2 py-1 font-semibold text-blue-700">LEN {fmtTimeCS(abText.len)}</span>}
-          </div>
-
-          <div className="text-[11px] text-zinc-500">
-            좌클릭: 탐색 · <b>우클릭 드래그</b>: 구간 설정 · <b>Ctrl/⌘+휠</b>: 줌 · <b>ESC</b>: 구간 초기화 · 스냅 0.01s
-            {isTouchLike ? " · (터치 환경: 구간 이동/리사이즈 비활성화)" : ""}
-            {abText.a != null && abText.b != null && !loopEnabled ? " · (Loop OFF: A→B 1회 재생 모드)" : ""}
           </div>
         </div>
       </div>
