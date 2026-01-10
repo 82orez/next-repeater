@@ -845,9 +845,9 @@ export default function Waveform() {
 
       {/* Overview / Minimap */}
       <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
-        <div className="mb-1 flex items-center justify-between">
+        <div className="mb-1 hidden items-center justify-between md:flex">
           <div className="text-xs font-medium text-zinc-700">Overview</div>
-          <div className="hidden text-[11px] text-zinc-500 md:block">현재 뷰포트 표시 / 클릭으로 탐색</div>
+          <div className="text-[11px] text-zinc-500">현재 뷰포트 표시 / 클릭으로 탐색</div>
         </div>
         <div ref={minimapRef} className="w-full" />
       </div>
@@ -858,7 +858,7 @@ export default function Waveform() {
       {/* A/B 텍스트 + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex flex-wrap items-center gap-3 text-zinc-700">
+          <div className="flex w-full flex-wrap items-center justify-center gap-6 text-zinc-700">
             <button
               type="button"
               onClick={seekToA}
@@ -877,7 +877,9 @@ export default function Waveform() {
               B {abText.b != null ? fmtTimeCS(abText.b) : "--:--.--"}
             </button>
 
-            {abText.len != null && <span className="rounded-full bg-blue-50 px-2 py-1 font-semibold text-blue-700">LEN {fmtTimeCS(abText.len)}</span>}
+            {abText.len != null && (
+              <span className="hidden rounded-full bg-blue-50 px-2 py-1 font-semibold text-blue-700 md:block">LEN {fmtTimeCS(abText.len)}</span>
+            )}
           </div>
         </div>
       </div>
