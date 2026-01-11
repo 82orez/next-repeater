@@ -362,7 +362,7 @@ export default function Player() {
                 canLoop
                   ? loopEnabled
                     ? "bg-blue-600 text-white hover:bg-blue-700"
-                    : "border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
+                    : "border border-zinc-200 bg-gray-200 text-zinc-900 hover:bg-zinc-100"
                   : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
               )}
               title="반복 토글 (R)">
