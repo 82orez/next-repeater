@@ -75,7 +75,7 @@ export default function Waveform() {
     };
   }, []);
 
-  // ✅ "Loop OFF + AB 존재" 상태에서: 재생 시작 시 A로 강제 이동(1회 재생 UX)
+  // ✅ "Loop OFF + AB 존재" 상태에서 play 이벤트 시, 조건에 따라 A로 점프할지 말지 결정
   const oneShotAdjustingRef = useRef(false);
 
   const setWs = usePlayerStore((s) => s.setWs);
@@ -313,7 +313,9 @@ export default function Waveform() {
       syncRegionInteractivity();
     });
 
-    // ✅ "Loop OFF + AB 존재"면, 재생 시작 시 항상 A부터 시작
+    // ✅ Loop OFF + AB 존재일 때:
+    // - 현재 위치가 A~B 사이면 "그대로 재생"
+    // - 그 외( A 이전 / B 근처·이후 )면 "A부터 1회 재생"을 위해 A로 점프
     ws.on("play", () => {
       setPlaying(true);
 
@@ -328,11 +330,16 @@ export default function Waveform() {
       const b = Math.max(a0, b0);
       if (b <= a) return;
 
+      const now = typeof ws.getCurrentTime === "function" ? ws.getCurrentTime() : st.currentTime;
+
+      const EPS = 0.02;
+      const isInsideRemaining = now > a + EPS && now < b - EPS;
+
+      if (isInsideRemaining) return;
+
       if (oneShotAdjustingRef.current) return;
       oneShotAdjustingRef.current = true;
 
-      // play 이벤트는 "이미 play()"가 호출된 직후라 seek 레이스가 생길 수 있어서,
-      // 다음 tick에 play(a)로 확실히 A부터 시작하도록 강제
       queueMicrotask(() => {
         const ws2 = wsRef.current;
         if (!ws2) {
@@ -340,7 +347,7 @@ export default function Waveform() {
           return;
         }
         (ws2 as any).play?.(a);
-        // 너무 오래 잡고 있진 않도록 빠르게 해제
+
         window.setTimeout(() => {
           oneShotAdjustingRef.current = false;
         }, 0);
@@ -361,7 +368,6 @@ export default function Waveform() {
 
       // ✅ (1) Loop OFF + AB 설정됨 => "1회 재생 모드"
       if (!st.loopEnabled && a0 != null && b0 != null) {
-        // 기존 루프 가드가 남아있을 수 있으니, one-shot에서는 정리
         if (loopGuardRef.current || loopPendingRef.current) {
           loopGuardRef.current = false;
           loopPendingRef.current = null;
@@ -375,20 +381,17 @@ export default function Waveform() {
 
         const EPS_END = 0.01;
         if (t >= b - EPS_END) {
-          // ✅ B에 도달하면 정지 + 다음 재생을 위해 A로 되돌려두기(정지 상태)
+          // ✅ B에 도달하면 "정지 + 커서를 B에 그대로" (A로 되돌리지 않음)
           ws.pause();
-          ws.setTime(a);
-          setCurrentTime(a);
+          ws.setTime(b);
+          setCurrentTime(b);
         }
-        return; // ✅ one-shot에서는 아래 반복 로직으로 내려가지 않음
+        return;
       }
 
       // ✅ (2) Loop ON일 때만 반복 로직 실행
       if (!st.loopEnabled || a0 == null || b0 == null) return;
 
-      // ✅ 루프 재시작 중이면:
-      // - “B 이전으로 돌아온 게 확인될 때까지” guard 유지
-      // - 그 전엔 무조건 리턴(추가 inc 방지)
       if (loopGuardRef.current && loopPendingRef.current) {
         const bp = loopPendingRef.current.b;
         const EPS_BACK = 0.01;
