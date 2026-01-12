@@ -3,7 +3,7 @@
 
 import React, { useEffect, useMemo, useRef } from "react";
 import clsx from "clsx";
-import { Pause, Play, Repeat, Flag, Upload, Timer, ChevronLeft, ChevronRight, Volume2, Gauge, RotateCcw } from "lucide-react";
+import { Pause, Play, Repeat, Flag, Upload, Timer, ChevronLeft, ChevronRight, Volume2, Gauge, RotateCcw, ArrowLeftToLine } from "lucide-react";
 import Waveform from "@/components/Waveform";
 import BookmarkPanel from "@/components/BookmarkPanel";
 import { usePlayerStore } from "@/store/playerStore";
@@ -115,7 +115,7 @@ export default function Player() {
 
   // ✅ A부터 재생 버튼 동작:
   // 1) A/B 미설정이면: 3초 앞으로 seek
-  // 2) A/B 설정이면: A 지점부터 재생(기존 기능)
+  // 2) A/B 설정이면: A 지점부터 재생(구간 유지)
   const playFromA = () => {
     // A/B 구간이 없으면: 3초 앞으로
     if (!canLoop) {
@@ -421,13 +421,14 @@ export default function Player() {
               <span className="inline-flex items-center gap-2">Reset</span>
             </button>
 
-            {/* ✅ A부터 재생 (구간 유지) */}
+            {/* ✅ A부터 재생 (구간 유지) / (A/B 없으면 -3초) */}
             <button
               onClick={playFromA}
-              disabled={controlsDisabled} // ✅ canLoop 조건 제거
+              disabled={controlsDisabled} // ✅ A/B 없어도 버튼은 동작해야 함
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "3초 앞으로 이동"}>
-              <ChevronLeft className="h-4 w-4" /> A부터 재생
+              {canLoop ? <ArrowLeftToLine className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              {canLoop ? "A" : "3s"}
             </button>
 
             {/* ✅ B부터 재생 (구간 해제) */}
