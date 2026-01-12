@@ -437,8 +437,9 @@ export default function Player() {
                 resetRepeatCount();
               }}
               disabled={!audioUrl}
-              className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title="구간 초기화 (Esc)">
+              <RotateCcw className="h-4 w-4" />
               <span className="inline-flex items-center gap-2">Reset</span>
             </button>
 
@@ -447,7 +448,7 @@ export default function Player() {
               onClick={playFromA}
               disabled={controlsDisabled} // ✅ A/B 없어도 버튼은 동작해야 함
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "3초 앞으로 이동"}>
+              title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "-3초 이동"}>
               {canLoop ? <ArrowLeftToLine className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
               {canLoop ? "A" : "-3s"}
             </button>
@@ -457,7 +458,7 @@ export default function Player() {
               onClick={playFromBAndClearLoop}
               disabled={controlsDisabled} // ✅ A/B 없어도 버튼은 동작해야 함
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "3초 뒤로 이동"}>
+              title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "+3초 이동"}>
               {canLoop ? (
                 <>
                   B <ArrowRightFromLine className="h-4 w-4" />
