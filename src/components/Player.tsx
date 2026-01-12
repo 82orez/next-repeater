@@ -48,6 +48,7 @@ export default function Player() {
   const setVolume = usePlayerStore((s) => s.setVolume);
 
   const playPause = usePlayerStore((s) => s.playPause);
+  const play = usePlayerStore((s) => s.play); // ✅ 추가
   const stop = usePlayerStore((s) => s.stop);
   const setTime = usePlayerStore((s) => s.setTime);
   const seekBy = usePlayerStore((s) => s.seekBy);
@@ -110,6 +111,23 @@ export default function Player() {
     setLoopEnabled(true);
     resetRepeatCount();
     setTime(next.start);
+  };
+
+  // ✅ 현재 A/B 구간을 해제하고, B 지점부터 재생
+  const playFromBAndClearLoop = () => {
+    if (!canLoop) return;
+
+    const bRaw = Math.max(loopA!, loopB!);
+    const b = duration > 0 ? Math.min(bRaw, Math.max(0, duration - 0.01)) : bRaw;
+
+    // 중요: 먼저 A/B를 해제해야(스토어 기준) Waveform의 one-shot/loop 로직이 개입하지 않음
+    setLoopEnabled(false);
+    setLoopA(null);
+    setLoopB(null);
+    resetRepeatCount();
+
+    setTime(b);
+    play();
   };
 
   useEffect(() => {
@@ -382,6 +400,15 @@ export default function Player() {
               className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
               title="구간 초기화 (Esc)">
               <span className="inline-flex items-center gap-2">Reset</span>
+            </button>
+
+            {/* ✅ B부터 재생 (구간 해제) */}
+            <button
+              onClick={playFromBAndClearLoop}
+              disabled={!canLoop || controlsDisabled}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="A/B 구간을 해제하고 B 지점부터 재생">
+              B부터 재생 <ChevronRight className="h-4 w-4" />
             </button>
 
             <div className="h-8 w-px bg-zinc-200" />
