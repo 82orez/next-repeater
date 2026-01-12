@@ -113,14 +113,21 @@ export default function Player() {
     setTime(next.start);
   };
 
-  // ✅ 현재 A/B 구간의 A 지점부터 다시 재생 (구간은 유지)
+  // ✅ A부터 재생 버튼 동작:
+  // 1) A/B 미설정이면: 3초 앞으로 seek
+  // 2) A/B 설정이면: A 지점부터 재생(기존 기능)
   const playFromA = () => {
-    if (!canLoop) return;
+    // A/B 구간이 없으면: 3초 앞으로
+    if (!canLoop) {
+      if (controlsDisabled) return;
+      seekBy(-3);
+      return;
+    }
 
+    // A/B 구간이 있으면: A부터 재생(구간 유지)
     const aRaw = Math.min(loopA!, loopB!);
     const a = duration > 0 ? Math.min(aRaw, Math.max(0, duration - 0.01)) : aRaw;
 
-    // 구간을 유지한 채 A부터 재생
     setTime(a);
     play();
   };
@@ -417,9 +424,9 @@ export default function Player() {
             {/* ✅ A부터 재생 (구간 유지) */}
             <button
               onClick={playFromA}
-              disabled={!canLoop || controlsDisabled}
+              disabled={controlsDisabled} // ✅ canLoop 조건 제거
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="현재 A/B 구간의 A 지점부터 다시 재생">
+              title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "3초 앞으로 이동"}>
               <ChevronLeft className="h-4 w-4" /> A부터 재생
             </button>
 
