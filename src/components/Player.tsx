@@ -113,6 +113,18 @@ export default function Player() {
     setTime(next.start);
   };
 
+  // ✅ 현재 A/B 구간의 A 지점부터 다시 재생 (구간은 유지)
+  const playFromA = () => {
+    if (!canLoop) return;
+
+    const aRaw = Math.min(loopA!, loopB!);
+    const a = duration > 0 ? Math.min(aRaw, Math.max(0, duration - 0.01)) : aRaw;
+
+    // 구간을 유지한 채 A부터 재생
+    setTime(a);
+    play();
+  };
+
   // ✅ 현재 A/B 구간을 해제하고, B 지점부터 재생
   const playFromBAndClearLoop = () => {
     if (!canLoop) return;
@@ -400,6 +412,15 @@ export default function Player() {
               className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
               title="구간 초기화 (Esc)">
               <span className="inline-flex items-center gap-2">Reset</span>
+            </button>
+
+            {/* ✅ A부터 재생 (구간 유지) */}
+            <button
+              onClick={playFromA}
+              disabled={!canLoop || controlsDisabled}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="현재 A/B 구간의 A 지점부터 다시 재생">
+              <ChevronLeft className="h-4 w-4" /> A부터 재생
             </button>
 
             {/* ✅ B부터 재생 (구간 해제) */}
