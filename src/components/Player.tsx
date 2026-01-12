@@ -3,7 +3,21 @@
 
 import React, { useEffect, useMemo, useRef } from "react";
 import clsx from "clsx";
-import { Pause, Play, Repeat, Flag, Upload, Timer, ChevronLeft, ChevronRight, Volume2, Gauge, RotateCcw, ArrowLeftToLine } from "lucide-react";
+import {
+  Pause,
+  Play,
+  Repeat,
+  Flag,
+  Upload,
+  Timer,
+  ChevronLeft,
+  ChevronRight,
+  Volume2,
+  Gauge,
+  RotateCcw,
+  ArrowLeftToLine,
+  ArrowRightFromLine,
+} from "lucide-react";
 import Waveform from "@/components/Waveform";
 import BookmarkPanel from "@/components/BookmarkPanel";
 import { usePlayerStore } from "@/store/playerStore";
@@ -132,9 +146,16 @@ export default function Player() {
     play();
   };
 
-  // ✅ 현재 A/B 구간을 해제하고, B 지점부터 재생
+  // ✅ B부터 재생 버튼 동작:
+  // 1) A/B 미설정이면: +3초 뒤로 seek
+  // 2) A/B 설정이면: (기존) 구간 해제 + B 지점부터 재생
   const playFromBAndClearLoop = () => {
-    if (!canLoop) return;
+    // A/B 구간이 없으면: 3초 앞으로
+    if (!canLoop) {
+      if (controlsDisabled) return;
+      seekBy(3);
+      return;
+    }
 
     const bRaw = Math.max(loopA!, loopB!);
     const b = duration > 0 ? Math.min(bRaw, Math.max(0, duration - 0.01)) : bRaw;
@@ -428,16 +449,24 @@ export default function Player() {
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "3초 앞으로 이동"}>
               {canLoop ? <ArrowLeftToLine className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-              {canLoop ? "A" : "3s"}
+              {canLoop ? "A" : "-3s"}
             </button>
 
-            {/* ✅ B부터 재생 (구간 해제) */}
+            {/* ✅ B부터 재생 (구간 해제) / (A/B 없으면 +3초) */}
             <button
               onClick={playFromBAndClearLoop}
-              disabled={!canLoop || controlsDisabled}
+              disabled={controlsDisabled} // ✅ A/B 없어도 버튼은 동작해야 함
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="A/B 구간을 해제하고 B 지점부터 재생">
-              B부터 재생 <ChevronRight className="h-4 w-4" />
+              title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "3초 뒤로 이동"}>
+              {canLoop ? (
+                <>
+                  B <ArrowRightFromLine className="h-4 w-4" />
+                </>
+              ) : (
+                <>
+                  +3s <ChevronRight className="h-4 w-4" />
+                </>
+              )}
             </button>
 
             <div className="h-8 w-px bg-zinc-200" />
