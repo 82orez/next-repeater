@@ -471,15 +471,7 @@ export default function Player() {
 
             <div className="h-8 w-px bg-zinc-200" />
 
-            {/* Seek - 처음으로 - Seek */}
-            <button
-              onClick={() => seekBy(-3)}
-              disabled={controlsDisabled}
-              className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="3초 뒤로 (←)">
-              ← 3s
-            </button>
-
+            {/* 처음으로 */}
             <button
               onClick={() => {
                 stop();
@@ -491,14 +483,6 @@ export default function Player() {
               title="정지 + 00:00.00 이동">
               <RotateCcw className="h-4 w-4" />
               처음으로
-            </button>
-
-            <button
-              onClick={() => seekBy(3)}
-              disabled={controlsDisabled}
-              className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="3초 앞으로 (→)">
-              3s →
             </button>
 
             <div className="h-8 w-px bg-zinc-200" />
