@@ -62,7 +62,7 @@ export default function Player() {
   const setVolume = usePlayerStore((s) => s.setVolume);
 
   const playPause = usePlayerStore((s) => s.playPause);
-  const play = usePlayerStore((s) => s.play); // ✅ 추가
+  const play = usePlayerStore((s) => s.play);
   const stop = usePlayerStore((s) => s.stop);
   const setTime = usePlayerStore((s) => s.setTime);
   const seekBy = usePlayerStore((s) => s.seekBy);
@@ -127,11 +127,11 @@ export default function Player() {
     setTime(next.start);
   };
 
-  // ✅ A부터 재생 버튼 동작:
-  // 1) A/B 미설정이면: 3초 앞으로 seek
+  // ✅ A(-3s) 버튼 동작:
+  // 1) A/B 미설정이면: -3초 seek
   // 2) A/B 설정이면: A 지점부터 재생(구간 유지)
   const playFromA = () => {
-    // A/B 구간이 없으면: 3초 앞으로
+    // A/B 구간이 없으면: -3초
     if (!canLoop) {
       if (controlsDisabled) return;
       seekBy(-3);
@@ -146,11 +146,11 @@ export default function Player() {
     play();
   };
 
-  // ✅ B부터 재생 버튼 동작:
-  // 1) A/B 미설정이면: +3초 뒤로 seek
+  // ✅ B(+3s) 버튼 동작:
+  // 1) A/B 미설정이면: +3초 seek
   // 2) A/B 설정이면: (기존) 구간 해제 + B 지점부터 재생
   const playFromBAndClearLoop = () => {
-    // A/B 구간이 없으면: 3초 앞으로
+    // A/B 구간이 없으면: +3초
     if (!canLoop) {
       if (controlsDisabled) return;
       seekBy(3);
@@ -205,11 +205,19 @@ export default function Player() {
         return;
       }
 
+      // ✅ ← : playFromA 버튼과 동일 동작 (-3s / A부터 재생)
+      // ✅ Shift+← : -10s 유지
       if (ev.code === "ArrowLeft") {
         ev.preventDefault();
-        seekBy(ev.shiftKey ? -10 : -3);
+        if (ev.shiftKey) {
+          seekBy(-10);
+          return;
+        }
+        playFromA();
         return;
       }
+
+      // →는 기존대로: +3s, Shift+→: +10s
       if (ev.code === "ArrowRight") {
         ev.preventDefault();
         seekBy(ev.shiftKey ? 10 : 3);
@@ -275,6 +283,7 @@ export default function Player() {
     setPlaybackRate,
     zoomPps,
     setZoomPps,
+    playFromA, // ✅ 추가
   ]);
 
   const controlsDisabled = !audioUrl || !ws;
@@ -366,7 +375,7 @@ export default function Player() {
           <Waveform />
         </div>
 
-        {/* ✅ Transport: (A) - (Play/Pause) - (B) / Seek - (처음으로) - Seek */}
+        {/* ✅ Transport */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
             {/* Play / Pause */}
@@ -446,9 +455,9 @@ export default function Player() {
             {/* ✅ A부터 재생 (구간 유지) / (A/B 없으면 -3초) */}
             <button
               onClick={playFromA}
-              disabled={controlsDisabled} // ✅ A/B 없어도 버튼은 동작해야 함
+              disabled={controlsDisabled}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "-3초 이동"}>
+              title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "-3초 이동 (←)"}>
               {canLoop ? <ArrowLeftToLine className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
               {canLoop ? "A" : "-3s"}
             </button>
@@ -456,7 +465,7 @@ export default function Player() {
             {/* ✅ B부터 재생 (구간 해제) / (A/B 없으면 +3초) */}
             <button
               onClick={playFromBAndClearLoop}
-              disabled={controlsDisabled} // ✅ A/B 없어도 버튼은 동작해야 함
+              disabled={controlsDisabled}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "+3초 이동"}>
               {canLoop ? (
@@ -476,7 +485,6 @@ export default function Player() {
             <button
               onClick={() => {
                 stop();
-                // 안전장치: stop이 내부적으로 0으로 이동하지 않는 구현이라도 "처음으로" UX를 보장
                 setTime(0);
               }}
               disabled={controlsDisabled}
@@ -648,7 +656,7 @@ export default function Player() {
                   <b>ESC</b>: 구간 초기화
                 </li>
                 <li>
-                  <b>←/→</b>: 3초 이동, <b>Shift+←/→</b>: 10초 이동
+                  <b>←</b>: A부터 재생 / -3초, <b>Shift+←</b>: -10초, <b>→</b>: +3초, <b>Shift+→</b>: +10초
                 </li>
                 <li>
                   <b>A</b>: A 지정, <b>B</b>: B 지정, <b>R</b>: 반복 토글 (L도 지원)
