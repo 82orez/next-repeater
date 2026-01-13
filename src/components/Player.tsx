@@ -3,7 +3,21 @@
 
 import React, { useEffect, useMemo, useRef } from "react";
 import clsx from "clsx";
-import { Pause, Play, Repeat, Flag, Upload, Timer, ChevronLeft, ChevronRight, Volume2, Gauge, RotateCcw } from "lucide-react";
+import {
+  Pause,
+  Play,
+  Repeat,
+  Flag,
+  Upload,
+  Timer,
+  ChevronLeft,
+  ChevronRight,
+  Volume2,
+  Gauge,
+  RotateCcw,
+  ArrowLeftToLine,
+  ArrowRightFromLine,
+} from "lucide-react";
 import Waveform from "@/components/Waveform";
 import BookmarkPanel from "@/components/BookmarkPanel";
 import { usePlayerStore } from "@/store/playerStore";
@@ -48,6 +62,7 @@ export default function Player() {
   const setVolume = usePlayerStore((s) => s.setVolume);
 
   const playPause = usePlayerStore((s) => s.playPause);
+  const play = usePlayerStore((s) => s.play); // ✅ 추가
   const stop = usePlayerStore((s) => s.stop);
   const setTime = usePlayerStore((s) => s.setTime);
   const seekBy = usePlayerStore((s) => s.seekBy);
@@ -110,6 +125,49 @@ export default function Player() {
     setLoopEnabled(true);
     resetRepeatCount();
     setTime(next.start);
+  };
+
+  // ✅ A부터 재생 버튼 동작:
+  // 1) A/B 미설정이면: 3초 앞으로 seek
+  // 2) A/B 설정이면: A 지점부터 재생(구간 유지)
+  const playFromA = () => {
+    // A/B 구간이 없으면: 3초 앞으로
+    if (!canLoop) {
+      if (controlsDisabled) return;
+      seekBy(-3);
+      return;
+    }
+
+    // A/B 구간이 있으면: A부터 재생(구간 유지)
+    const aRaw = Math.min(loopA!, loopB!);
+    const a = duration > 0 ? Math.min(aRaw, Math.max(0, duration - 0.01)) : aRaw;
+
+    setTime(a);
+    play();
+  };
+
+  // ✅ B부터 재생 버튼 동작:
+  // 1) A/B 미설정이면: +3초 뒤로 seek
+  // 2) A/B 설정이면: (기존) 구간 해제 + B 지점부터 재생
+  const playFromBAndClearLoop = () => {
+    // A/B 구간이 없으면: 3초 앞으로
+    if (!canLoop) {
+      if (controlsDisabled) return;
+      seekBy(3);
+      return;
+    }
+
+    const bRaw = Math.max(loopA!, loopB!);
+    const b = duration > 0 ? Math.min(bRaw, Math.max(0, duration - 0.01)) : bRaw;
+
+    // 중요: 먼저 A/B를 해제해야(스토어 기준) Waveform의 one-shot/loop 로직이 개입하지 않음
+    setLoopEnabled(false);
+    setLoopA(null);
+    setLoopB(null);
+    resetRepeatCount();
+
+    setTime(b);
+    play();
   };
 
   useEffect(() => {
@@ -379,22 +437,42 @@ export default function Player() {
                 resetRepeatCount();
               }}
               disabled={!audioUrl}
-              className="rounded-2xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title="구간 초기화 (Esc)">
+              <RotateCcw className="h-4 w-4" />
               <span className="inline-flex items-center gap-2">Reset</span>
+            </button>
+
+            {/* ✅ A부터 재생 (구간 유지) / (A/B 없으면 -3초) */}
+            <button
+              onClick={playFromA}
+              disabled={controlsDisabled} // ✅ A/B 없어도 버튼은 동작해야 함
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "-3초 이동"}>
+              {canLoop ? <ArrowLeftToLine className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              {canLoop ? "A" : "-3s"}
+            </button>
+
+            {/* ✅ B부터 재생 (구간 해제) / (A/B 없으면 +3초) */}
+            <button
+              onClick={playFromBAndClearLoop}
+              disabled={controlsDisabled} // ✅ A/B 없어도 버튼은 동작해야 함
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "+3초 이동"}>
+              {canLoop ? (
+                <>
+                  B <ArrowRightFromLine className="h-4 w-4" />
+                </>
+              ) : (
+                <>
+                  +3s <ChevronRight className="h-4 w-4" />
+                </>
+              )}
             </button>
 
             <div className="h-8 w-px bg-zinc-200" />
 
-            {/* Seek - 처음으로 - Seek */}
-            <button
-              onClick={() => seekBy(-3)}
-              disabled={controlsDisabled}
-              className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="3초 뒤로 (←)">
-              ← 3s
-            </button>
-
+            {/* 처음으로 */}
             <button
               onClick={() => {
                 stop();
@@ -406,14 +484,6 @@ export default function Player() {
               title="정지 + 00:00.00 이동">
               <RotateCcw className="h-4 w-4" />
               처음으로
-            </button>
-
-            <button
-              onClick={() => seekBy(3)}
-              disabled={controlsDisabled}
-              className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="3초 앞으로 (→)">
-              3s →
             </button>
 
             <div className="h-8 w-px bg-zinc-200" />
