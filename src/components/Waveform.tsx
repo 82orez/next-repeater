@@ -381,10 +381,10 @@ export default function Waveform() {
 
         const EPS_END = 0.01;
         if (t >= b - EPS_END) {
-          // ✅ B에 도달하면 "정지 + 커서를 B에 그대로" (A로 되돌리지 않음)
+          // ✅ B에 도달하면 "정지 + 커서를 A로 되돌림)
           ws.pause();
-          ws.setTime(b);
-          setCurrentTime(b);
+          ws.setTime(a);
+          setCurrentTime(a);
         }
         return;
       }
