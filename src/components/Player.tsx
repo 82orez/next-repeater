@@ -1,7 +1,7 @@
 // src/components/Player.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import clsx from "clsx";
 import {
   Pause,
@@ -127,30 +127,29 @@ export default function Player() {
     setTime(next.start);
   };
 
+  const controlsDisabled = !audioUrl || !ws;
+
   // ✅ A(-3s) 버튼 동작:
   // 1) A/B 미설정이면: -3초 seek
   // 2) A/B 설정이면: A 지점부터 재생(구간 유지)
-  const playFromA = () => {
-    // A/B 구간이 없으면: -3초
+  const playFromA = useCallback(() => {
     if (!canLoop) {
       if (controlsDisabled) return;
       seekBy(-3);
       return;
     }
 
-    // A/B 구간이 있으면: A부터 재생(구간 유지)
     const aRaw = Math.min(loopA!, loopB!);
     const a = duration > 0 ? Math.min(aRaw, Math.max(0, duration - 0.01)) : aRaw;
 
     setTime(a);
     play();
-  };
+  }, [canLoop, controlsDisabled, seekBy, loopA, loopB, duration, setTime, play]);
 
   // ✅ B(+3s) 버튼 동작:
   // 1) A/B 미설정이면: +3초 seek
   // 2) A/B 설정이면: (기존) 구간 해제 + B 지점부터 재생
-  const playFromBAndClearLoop = () => {
-    // A/B 구간이 없으면: +3초
+  const playFromBAndClearLoop = useCallback(() => {
     if (!canLoop) {
       if (controlsDisabled) return;
       seekBy(3);
@@ -168,7 +167,7 @@ export default function Player() {
 
     setTime(b);
     play();
-  };
+  }, [canLoop, controlsDisabled, seekBy, loopA, loopB, duration, setLoopEnabled, setLoopA, setLoopB, resetRepeatCount, setTime, play]);
 
   useEffect(() => {
     if (!audioUrl) return;
@@ -217,10 +216,15 @@ export default function Player() {
         return;
       }
 
-      // →는 기존대로: +3s, Shift+→: +10s
+      // ✅ → : playFromB 버튼과 동일 동작 (+3s / (AB 있으면) 구간해제 + B부터)
+      // ✅ Shift+→ : +10s 유지
       if (ev.code === "ArrowRight") {
         ev.preventDefault();
-        seekBy(ev.shiftKey ? 10 : 3);
+        if (ev.shiftKey) {
+          seekBy(10);
+          return;
+        }
+        playFromBAndClearLoop();
         return;
       }
 
@@ -283,10 +287,9 @@ export default function Player() {
     setPlaybackRate,
     zoomPps,
     setZoomPps,
-    playFromA, // ✅ 추가
+    playFromA,
+    playFromBAndClearLoop,
   ]);
-
-  const controlsDisabled = !audioUrl || !ws;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10">
@@ -467,7 +470,7 @@ export default function Player() {
               onClick={playFromBAndClearLoop}
               disabled={controlsDisabled}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "+3초 이동"}>
+              title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "+3초 이동 (→)"}>
               {canLoop ? (
                 <>
                   B <ArrowRightFromLine className="h-4 w-4" />
@@ -656,7 +659,10 @@ export default function Player() {
                   <b>ESC</b>: 구간 초기화
                 </li>
                 <li>
-                  <b>←</b>: A부터 재생 / -3초, <b>Shift+←</b>: -10초, <b>→</b>: +3초, <b>Shift+→</b>: +10초
+                  <b>←</b>: A부터 재생 / -3초, <b>Shift+←</b>: -10초
+                </li>
+                <li>
+                  <b>→</b>: B부터 재생 / +3초, <b>Shift+→</b>: +10초
                 </li>
                 <li>
                   <b>A</b>: A 지정, <b>B</b>: B 지정, <b>R</b>: 반복 토글 (L도 지원)
