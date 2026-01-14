@@ -14,6 +14,10 @@ const RB_TMP_ID = "rb_tmp";
 // ✅ 스냅 간격(0.01초)
 const SNAP_SEC = 0.01;
 
+// ✅ iOS(WebKit: Safari/Chrome) 오디오 출력 레이턴시 보정용 "숨은 리드인" (A보다 먼저 재생 시작 + A까지 무음)
+// 경험적으로 0.20~0.35 범위에서 기기/출력장치에 따라 튜닝 필요
+const IOS_LATENCY_COMP_SEC = 0.28;
+
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -74,12 +78,29 @@ export default function Waveform() {
     };
   }, []);
 
+  // ✅ iOS Chrome/Safari 공통(WebKit) 보정 플래그
+  const isIOSWebKit = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    return isIOS;
+  }, []);
+
+  const latencyCompSec = isIOSWebKit ? IOS_LATENCY_COMP_SEC : 0;
+
   // ✅ "Loop OFF + AB 존재" 상태에서 play 이벤트 시, 조건에 따라 A로 점프할지 말지 결정
   const oneShotAdjustingRef = useRef(false);
 
   // ✅ iOS/모바일에서 timeupdate가 늦거나 튀는 문제 대응:
   // 재생 중에는 rAF로 getCurrentTime()을 폴링해서 B 컷/루프를 더 정확히 처리
   const monitorRafRef = useRef<number | null>(null);
+
+  // ✅ A보다 일찍 재생을 걸어두고(A-리드인), A 도달 시 볼륨을 올리는 게이트
+  const gateUnmuteRef = useRef<{
+    a: number;
+    targetVol: number;
+    fadeMs: number;
+  } | null>(null);
 
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
@@ -220,15 +241,28 @@ export default function Waveform() {
       const t = typeof ws.getCurrentTime === "function" ? ws.getCurrentTime() : st.currentTime;
       setCurrentTime(t);
 
+      // ✅ (A) "숨은 리드인"으로 시작한 경우: A 도달 시 볼륨 오픈(무음 -> 원볼륨)
+      if (gateUnmuteRef.current) {
+        const g = gateUnmuteRef.current;
+        const EPS_OPEN = 0.01;
+        if (t >= g.a - EPS_OPEN) {
+          gateUnmuteRef.current = null;
+          cancelFade();
+          if (g.fadeMs > 0) rampVolume(0, g.targetVol, g.fadeMs);
+          else ws.setVolume(g.targetVol);
+        }
+      }
+
       if (a0 != null && b0 != null) {
         const a = Math.min(a0, b0);
         const b = Math.max(a0, b0);
         if (b > a) {
           // 마진(모바일/iOS에서 timeupdate가 늦게 오거나 오버슈트가 더 큼)
-          // - 기본 25ms
-          // - 재생 속도 빠를수록 약간 더 크게
           const rate = Math.max(0.5, st.playbackRate || 1);
-          const cutMargin = Math.min(0.06, 0.025 + (rate - 1) * 0.015);
+          const baseMargin = Math.min(0.06, 0.025 + (rate - 1) * 0.015);
+
+          // ✅ iOS는 출력 레이턴시 보정을 위해 컷을 더 일찍 처리
+          const cutMargin = Math.max(baseMargin, latencyCompSec);
 
           // ✅ (1) Loop OFF + AB 설정됨 => "1회 재생 모드"
           if (!st.loopEnabled) {
@@ -257,11 +291,22 @@ export default function Waveform() {
               const fadeMs = Math.max(0, st.fadeMs);
               const pauseMs = Math.max(0, st.autoPauseMs);
 
-              const jumpStart = Math.max(0, a - preRoll);
+              // ✅ iOS 보정: preRoll이 없을 때만 "숨은 리드인" 적용
+              const hiddenLeadIn = preRoll <= 0 ? latencyCompSec : 0;
+              const jumpStart = Math.max(0, a - preRoll - hiddenLeadIn);
 
               const doJumpAndPlay = () => {
                 const ws2 = wsRef.current;
                 if (!ws2) return;
+
+                // ✅ hiddenLeadIn이 있으면 A까지는 무음 게이트
+                if (hiddenLeadIn > 0) {
+                  cancelFade();
+                  ws2.setVolume(0);
+                  gateUnmuteRef.current = { a, targetVol, fadeMs };
+                  (ws2 as any).play?.(jumpStart);
+                  return;
+                }
 
                 // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
                 if (fadeMs > 0) {
@@ -329,6 +374,8 @@ export default function Waveform() {
     // ✅ 반복 가드 상태도 같이 초기화
     loopPendingRef.current = null;
     loopGuardRef.current = false;
+
+    gateUnmuteRef.current = null;
 
     setLoopEnabled(false);
     setLoopA(null);
@@ -480,7 +527,19 @@ export default function Waveform() {
           oneShotAdjustingRef.current = false;
           return;
         }
-        (ws2 as any).play?.(a);
+
+        // ✅ Loop OFF 원샷도 iOS면 "숨은 리드인 + A에서 볼륨 오픈" 적용
+        const hiddenLeadIn = latencyCompSec;
+        const startAt = Math.max(0, a - hiddenLeadIn);
+
+        if (hiddenLeadIn > 0) {
+          cancelFade();
+          ws2.setVolume(0);
+          gateUnmuteRef.current = { a, targetVol: st.volume, fadeMs: Math.max(0, st.fadeMs) };
+          (ws2 as any).play?.(startAt);
+        } else {
+          (ws2 as any).play?.(a);
+        }
 
         window.setTimeout(() => {
           oneShotAdjustingRef.current = false;
@@ -491,10 +550,12 @@ export default function Waveform() {
     ws.on("pause", () => {
       setPlaying(false);
       stopMonitor();
+      gateUnmuteRef.current = null;
     });
     ws.on("finish", () => {
       setPlaying(false);
       stopMonitor();
+      gateUnmuteRef.current = null;
     });
 
     // ✅ iOS에서 timeupdate 주기가 불안정할 수 있어서, 재생 중에는 audioprocess도 같이 사용
@@ -801,6 +862,8 @@ export default function Waveform() {
         loopTimerRef.current = null;
       }
 
+      gateUnmuteRef.current = null;
+
       wrapperEl.removeEventListener("contextmenu", onContextMenu);
       wrapperEl.removeEventListener("pointerdown", onPointerDown);
       wrapperEl.removeEventListener("pointermove", onPointerMove);
@@ -815,7 +878,7 @@ export default function Waveform() {
       setWs(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTouchLike]);
+  }, [isTouchLike, isIOSWebKit, latencyCompSec]);
 
   useEffect(() => {
     syncRegionInteractivity();
@@ -831,6 +894,7 @@ export default function Waveform() {
     loopPendingRef.current = null;
     loopGuardRef.current = false;
     oneShotAdjustingRef.current = false;
+    gateUnmuteRef.current = null;
 
     stopMonitor();
 
