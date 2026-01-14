@@ -15,6 +15,22 @@ const RB_TMP_ID = "rb_tmp";
 // ✅ 스냅 간격(0.01초)
 const SNAP_SEC = 0.01;
 
+// ✅ iOS/모바일 seek 튕김 재현 시 콘솔 로그를 보고 싶으면 true로
+const DEBUG_IOS_SEEK = false;
+type DebugEventName =
+  | "ready"
+  | "play"
+  | "pause"
+  | "finish"
+  | "timeupdate"
+  | "loop-jump"
+  | "one-shot-adjust"
+  | "region-created"
+  | "region-updated"
+  | "load"
+  | "loading"
+  | "destroy";
+
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -99,6 +115,51 @@ export default function Waveform() {
   const loopEnabled = usePlayerStore((s) => s.loopEnabled);
   const loopA = usePlayerStore((s) => s.loopA);
   const loopB = usePlayerStore((s) => s.loopB);
+
+  // --- Debug logger (ring buffer) ---
+  const debugSeqRef = useRef(0);
+  const debugBufRef = useRef<
+    Array<{
+      i: number;
+      ts: number;
+      name: DebugEventName;
+      t?: number;
+      a?: number | null;
+      b?: number | null;
+      loopEnabled?: boolean;
+      isPlaying?: boolean;
+      note?: string;
+    }>
+  >([]);
+
+  const dbg = (name: DebugEventName, extra?: Partial<(typeof debugBufRef)["current"][number]>) => {
+    if (!DEBUG_IOS_SEEK) return;
+    const ws = wsRef.current;
+    const st = usePlayerStore.getState();
+
+    const item = {
+      i: ++debugSeqRef.current,
+      ts: performance.now(),
+      name,
+      t: typeof extra?.t === "number" ? extra.t : ws?.getCurrentTime?.(),
+      a: st.loopA,
+      b: st.loopB,
+      loopEnabled: st.loopEnabled,
+      isPlaying: typeof ws?.isPlaying === "function" ? ws.isPlaying() : undefined,
+      note: extra?.note,
+    };
+
+    debugBufRef.current.push(item);
+    if (debugBufRef.current.length > 120) debugBufRef.current.shift();
+
+    // 한 줄 출력 (필요 시 table로 바꾸세요)
+    // eslint-disable-next-line no-console
+    console.log(
+      `[WaveformDBG #${item.i}] ${item.name} t=${item.t != null ? item.t.toFixed(3) : "?"} a=${item.a ?? "null"} b=${item.b ?? "null"} loop=${
+        item.loopEnabled ? "ON" : "OFF"
+      } playing=${item.isPlaying ?? "?"}${item.note ? ` | ${item.note}` : ""}`,
+    );
+  };
 
   // ✅ A/B 텍스트 표시용 (정렬된 값)
   const abText = useMemo(() => {
@@ -296,6 +357,7 @@ export default function Waveform() {
     ws.on("loading", (pct) => {
       setIsLoadingWave(true);
       setLoadingPct(typeof pct === "number" ? pct : null);
+      dbg("loading", { note: `pct=${typeof pct === "number" ? pct : "?"}` });
     });
 
     ws.on("ready", () => {
@@ -311,6 +373,8 @@ export default function Waveform() {
       setLoadingPct(null);
 
       syncRegionInteractivity();
+
+      dbg("ready", { note: `dur=${ws.getDuration().toFixed(3)}` });
     });
 
     // ✅ Loop OFF + AB 존재일 때:
@@ -318,6 +382,7 @@ export default function Waveform() {
     // - 그 외( A 이전 / B 근처·이후 )면 "A부터 1회 재생"을 위해 A로 점프
     ws.on("play", () => {
       setPlaying(true);
+      dbg("play");
 
       const st = usePlayerStore.getState();
       const a0 = st.loopA;
@@ -332,8 +397,11 @@ export default function Waveform() {
 
       const now = typeof ws.getCurrentTime === "function" ? ws.getCurrentTime() : st.currentTime;
 
-      const EPS = 0.02;
-      const isInsideRemaining = now > a + EPS && now < b - EPS;
+      // ✅ iOS에서 seek 반영이 늦어 now가 A보다 약간 작게 잡히거나, now===A인 경우가 흔함
+      // ✅ A 근처도 "구간 내부"로 취급해서 불필요한 A 재점프(튕김) 방지
+      const EPS_START = 0.08;
+      const EPS_END = 0.02;
+      const isInsideRemaining = now >= a - EPS_START && now < b - EPS_END;
 
       if (isInsideRemaining) return;
 
@@ -346,7 +414,11 @@ export default function Waveform() {
           oneShotAdjustingRef.current = false;
           return;
         }
-        (ws2 as any).play?.(a);
+
+        dbg("one-shot-adjust", { note: `now=${now.toFixed(3)} -> setTime(${a.toFixed(3)})` });
+
+        // ✅ play(a)로 다시 시작시키기보다, 재생 중 커서만 A로 이동시키는 방식이 iOS에서 덜 튐
+        ws2.setTime(a);
 
         window.setTimeout(() => {
           oneShotAdjustingRef.current = false;
@@ -354,11 +426,19 @@ export default function Waveform() {
       });
     });
 
-    ws.on("pause", () => setPlaying(false));
-    ws.on("finish", () => setPlaying(false));
+    ws.on("pause", () => {
+      setPlaying(false);
+      dbg("pause");
+    });
+
+    ws.on("finish", () => {
+      setPlaying(false);
+      dbg("finish");
+    });
 
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
+      dbg("timeupdate", { t });
 
       const st = usePlayerStore.getState();
       const a0 = st.loopA;
@@ -434,6 +514,8 @@ export default function Waveform() {
           const ws2 = wsRef.current;
           if (!ws2) return;
 
+          dbg("loop-jump", { note: `t>=b (${t.toFixed(3)}>=${b.toFixed(3)}), jumpStart=${jumpStart.toFixed(3)}` });
+
           // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
           if (fadeMs > 0) {
             ws2.setVolume(0);
@@ -485,6 +567,8 @@ export default function Waveform() {
       const end = snapTime(end0, dur);
       if (end <= start) return;
 
+      dbg("region-created", { note: `start=${start.toFixed(3)} end=${end.toFixed(3)}` });
+
       setLoopRange(start, end);
       setLoopEnabled(true);
       resetRepeatCount();
@@ -513,6 +597,8 @@ export default function Waveform() {
           });
         }
 
+        dbg("region-updated", { note: `${r.id} s=${s.toFixed(3)}` });
+
         if (r.id === MARK_A_ID) {
           setLoopA(s);
           resetRepeatCount();
@@ -538,6 +624,8 @@ export default function Waveform() {
             snapApplyingRef.current = false;
           });
         }
+
+        dbg("region-updated", { note: `AB s=${s.toFixed(3)} e=${e.toFixed(3)}` });
 
         setLoopRange(s, e);
         setLoopEnabled(true);
@@ -696,6 +784,7 @@ export default function Waveform() {
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
+      dbg("destroy");
       cancelFade();
       if (loopTimerRef.current) {
         window.clearTimeout(loopTimerRef.current);
@@ -742,6 +831,7 @@ export default function Waveform() {
     cancelFade();
 
     if (audioUrl) {
+      dbg("load", { note: "load(audioUrl)" });
       setIsLoadingWave(true);
       setLoadingPct(null);
       ws.load(audioUrl);
