@@ -40,9 +40,6 @@ export default function Waveform() {
   const loopGuardRef = useRef(false);
   const fadeRafRef = useRef<number | null>(null);
 
-  // ✅ (모바일 timeupdate 지연 대응) B 도달 직전 루프를 예약하는 타이머
-  const loopEdgeTimerRef = useRef<number | null>(null);
-
   // ✅ repeatCount가 +2 되는 문제 방지용: “루프 재시작이 완료될 때까지” guard 유지
   const loopPendingRef = useRef<{ b: number } | null>(null);
 
@@ -128,13 +125,6 @@ export default function Waveform() {
     }
   };
 
-  const clearLoopEdgeTimer = () => {
-    if (loopEdgeTimerRef.current != null) {
-      window.clearTimeout(loopEdgeTimerRef.current);
-      loopEdgeTimerRef.current = null;
-    }
-  };
-
   const rampVolume = (from: number, to: number, ms: number, done?: () => void) => {
     cancelFade();
     if (ms <= 0) {
@@ -211,7 +201,6 @@ export default function Waveform() {
     // ✅ 반복 가드 상태도 같이 초기화
     loopPendingRef.current = null;
     loopGuardRef.current = false;
-    clearLoopEdgeTimer();
 
     setLoopEnabled(false);
     setLoopA(null);
@@ -324,109 +313,6 @@ export default function Waveform() {
       syncRegionInteractivity();
     });
 
-    // ✅ 루프 실행 로직을 함수로 뽑아: timeupdate / 스케줄 타이머에서 공용 사용
-    const runLoopCycle = () => {
-      const ws2 = wsRef.current;
-      if (!ws2) return;
-
-      const st = usePlayerStore.getState();
-      const a0 = st.loopA;
-      const b0 = st.loopB;
-
-      if (!st.loopEnabled || a0 == null || b0 == null) return;
-
-      const isPlayingNow = typeof ws2.isPlaying === "function" ? ws2.isPlaying() : false;
-      if (!isPlayingNow) return;
-
-      const a = Math.min(a0, b0);
-      const b = Math.max(a0, b0);
-      if (b <= a) return;
-
-      if (st.repeatTarget > 0 && st.repeatCount >= st.repeatTarget) {
-        ws2.pause();
-        return;
-      }
-
-      loopGuardRef.current = true;
-      loopPendingRef.current = { b };
-      st.incRepeatCount();
-
-      const targetVol = st.volume;
-      const preRoll = Math.max(0, st.preRollSec);
-      const fadeMs = Math.max(0, st.fadeMs);
-      const pauseMs = Math.max(0, st.autoPauseMs);
-
-      const jumpStart = Math.max(0, a - preRoll);
-
-      const doJumpAndPlay = () => {
-        const ws3 = wsRef.current;
-        if (!ws3) return;
-
-        if (fadeMs > 0) {
-          ws3.setVolume(0);
-          (ws3 as any).play?.(jumpStart);
-          rampVolume(0, targetVol, fadeMs);
-        } else {
-          ws3.setVolume(targetVol);
-          (ws3 as any).play?.(jumpStart);
-        }
-      };
-
-      const afterPause = () => {
-        if (pauseMs > 0) {
-          if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
-          loopTimerRef.current = window.setTimeout(doJumpAndPlay, pauseMs);
-        } else {
-          doJumpAndPlay();
-        }
-      };
-
-      if (fadeMs > 0) {
-        rampVolume(targetVol, 0, fadeMs, () => {
-          ws2.pause();
-          afterPause();
-        });
-      } else {
-        if (pauseMs > 0) ws2.pause();
-        afterPause();
-      }
-    };
-
-    const scheduleLoopEdge = () => {
-      clearLoopEdgeTimer();
-
-      const ws2 = wsRef.current;
-      if (!ws2) return;
-
-      const st = usePlayerStore.getState();
-      const a0 = st.loopA;
-      const b0 = st.loopB;
-
-      if (!st.loopEnabled || a0 == null || b0 == null) return;
-
-      const a = Math.min(a0, b0);
-      const b = Math.max(a0, b0);
-      if (b <= a) return;
-
-      const isPlayingNow = typeof ws2.isPlaying === "function" ? ws2.isPlaying() : false;
-      if (!isPlayingNow) return;
-
-      const now = typeof ws2.getCurrentTime === "function" ? ws2.getCurrentTime() : st.currentTime;
-      if (!(now >= 0)) return;
-
-      // 범위 밖이면 굳이 스케줄하지 않음(사용자 seek 등)
-      if (now < a || now >= b) return;
-
-      const rate = Math.max(0.25, st.playbackRate || 1);
-      const remainingSec = b - now;
-      const safetyMs = 35; // 모바일 timeupdate/timer 지연 흡수용 (필요시 20~60ms 튜닝)
-      const ms = Math.max(0, Math.floor((remainingSec / rate) * 1000 - safetyMs));
-
-      loopEdgeTimerRef.current = window.setTimeout(() => {
-        runLoopCycle();
-      }, ms);
-    };
-
     // ✅ Loop OFF + AB 존재일 때:
     // - 현재 위치가 A~B 사이면 "그대로 재생"
     // - 그 외( A 이전 / B 근처·이후 )면 "A부터 1회 재생"을 위해 A로 점프
@@ -436,12 +322,6 @@ export default function Waveform() {
       const st = usePlayerStore.getState();
       const a0 = st.loopA;
       const b0 = st.loopB;
-
-      // ✅ Loop ON이면: 모바일 지연 방지를 위해 "B 직전" 스케줄링
-      if (st.loopEnabled && a0 != null && b0 != null) {
-        scheduleLoopEdge();
-        return;
-      }
 
       if (st.loopEnabled) return;
       if (a0 == null || b0 == null) return;
@@ -474,15 +354,8 @@ export default function Waveform() {
       });
     });
 
-    ws.on("pause", () => {
-      setPlaying(false);
-      clearLoopEdgeTimer();
-    });
-
-    ws.on("finish", () => {
-      setPlaying(false);
-      clearLoopEdgeTimer();
-    });
+    ws.on("pause", () => setPlaying(false));
+    ws.on("finish", () => setPlaying(false));
 
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
@@ -519,11 +392,6 @@ export default function Waveform() {
       // ✅ (2) Loop ON일 때만 반복 로직 실행
       if (!st.loopEnabled || a0 == null || b0 == null) return;
 
-      // 재생 중이면 스케줄이 끊겼을 수 있어 보조로 재설정
-      if (isPlayingNow && loopEdgeTimerRef.current == null) {
-        scheduleLoopEdge();
-      }
-
       if (loopGuardRef.current && loopPendingRef.current) {
         const bp = loopPendingRef.current.b;
         const EPS_BACK = 0.01;
@@ -531,9 +399,6 @@ export default function Waveform() {
         if (isPlayingNow && t < bp - EPS_BACK) {
           loopPendingRef.current = null;
           loopGuardRef.current = false;
-
-          // 루프가 다시 시작됐으니 다음 B도 스케줄
-          scheduleLoopEdge();
         } else {
           return;
         }
@@ -547,10 +412,58 @@ export default function Waveform() {
       if (b <= a) return;
       if (loopGuardRef.current) return;
 
-      // ✅ fallback: timeupdate가 너무 늦게 와도 최소한 루프는 걸리게
       if (t >= b) {
-        clearLoopEdgeTimer();
-        runLoopCycle();
+        if (st.repeatTarget > 0 && st.repeatCount >= st.repeatTarget) {
+          ws.pause();
+          return;
+        }
+
+        // ✅ 여기서부터 루프 사이클 시작: guard + pending 세팅
+        loopGuardRef.current = true;
+        loopPendingRef.current = { b };
+        st.incRepeatCount();
+
+        const targetVol = st.volume;
+        const preRoll = Math.max(0, st.preRollSec);
+        const fadeMs = Math.max(0, st.fadeMs);
+        const pauseMs = Math.max(0, st.autoPauseMs);
+
+        const jumpStart = Math.max(0, a - preRoll);
+
+        const doJumpAndPlay = () => {
+          const ws2 = wsRef.current;
+          if (!ws2) return;
+
+          // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
+          if (fadeMs > 0) {
+            ws2.setVolume(0);
+            (ws2 as any).play?.(jumpStart);
+            rampVolume(0, targetVol, fadeMs);
+          } else {
+            ws2.setVolume(targetVol);
+            (ws2 as any).play?.(jumpStart);
+          }
+          // ✅ loopGuardRef 해제는 timeupdate에서 “B 이전 복귀 확인” 후 수행
+        };
+
+        const afterPause = () => {
+          if (pauseMs > 0) {
+            if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
+            loopTimerRef.current = window.setTimeout(doJumpAndPlay, pauseMs);
+          } else {
+            doJumpAndPlay();
+          }
+        };
+
+        if (fadeMs > 0) {
+          rampVolume(targetVol, 0, fadeMs, () => {
+            ws.pause();
+            afterPause();
+          });
+        } else {
+          if (pauseMs > 0) ws.pause();
+          afterPause();
+        }
       }
     });
 
@@ -784,7 +697,6 @@ export default function Waveform() {
 
     return () => {
       cancelFade();
-      clearLoopEdgeTimer();
       if (loopTimerRef.current) {
         window.clearTimeout(loopTimerRef.current);
         loopTimerRef.current = null;
@@ -819,7 +731,6 @@ export default function Waveform() {
     // ✅ 오디오 변경 시 guard 상태도 초기화
     loopPendingRef.current = null;
     loopGuardRef.current = false;
-    clearLoopEdgeTimer();
     oneShotAdjustingRef.current = false;
 
     setReady(false);
