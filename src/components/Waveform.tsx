@@ -1,4 +1,3 @@
-// src/components/Waveform.tsx
 "use client";
 
 import React, { useRef, useEffect, useMemo, useState } from "react";
@@ -77,6 +76,10 @@ export default function Waveform() {
 
   // ✅ "Loop OFF + AB 존재" 상태에서 play 이벤트 시, 조건에 따라 A로 점프할지 말지 결정
   const oneShotAdjustingRef = useRef(false);
+
+  // ✅ iOS/모바일에서 timeupdate가 늦거나 튀는 문제 대응:
+  // 재생 중에는 rAF로 getCurrentTime()을 폴링해서 B 컷/루프를 더 정확히 처리
+  const monitorRafRef = useRef<number | null>(null);
 
   const setWs = usePlayerStore((s) => s.setWs);
   const setReady = usePlayerStore((s) => s.setReady);
@@ -184,6 +187,131 @@ export default function Waveform() {
         return;
       }
     });
+  };
+
+  const stopMonitor = () => {
+    if (monitorRafRef.current) {
+      cancelAnimationFrame(monitorRafRef.current);
+      monitorRafRef.current = null;
+    }
+  };
+
+  // ✅ iOS/모바일에서 A점 시작 시 "살짝 튕김", B점 컷이 지연되는 현상 보정:
+  // - rAF 폴링으로 현재 시간을 읽고,
+  // - B 컷은 "조금 일찍(마진)" 처리
+  const startMonitor = () => {
+    stopMonitor();
+
+    const tick = () => {
+      const ws = wsRef.current;
+      if (!ws) return;
+
+      const st = usePlayerStore.getState();
+      const a0 = st.loopA;
+      const b0 = st.loopB;
+
+      // 재생 중이 아닐 때는 모니터만 유지하지 않음(불필요)
+      const isPlayingNow = typeof ws.isPlaying === "function" ? ws.isPlaying() : false;
+      if (!isPlayingNow) {
+        stopMonitor();
+        return;
+      }
+
+      const t = typeof ws.getCurrentTime === "function" ? ws.getCurrentTime() : st.currentTime;
+      setCurrentTime(t);
+
+      if (a0 != null && b0 != null) {
+        const a = Math.min(a0, b0);
+        const b = Math.max(a0, b0);
+        if (b > a) {
+          // 마진(모바일/iOS에서 timeupdate가 늦게 오거나 오버슈트가 더 큼)
+          // - 기본 25ms
+          // - 재생 속도 빠를수록 약간 더 크게
+          const rate = Math.max(0.5, st.playbackRate || 1);
+          const cutMargin = Math.min(0.06, 0.025 + (rate - 1) * 0.015);
+
+          // ✅ (1) Loop OFF + AB 설정됨 => "1회 재생 모드"
+          if (!st.loopEnabled) {
+            if (t >= b - cutMargin) {
+              ws.pause();
+              ws.setTime(a);
+              setCurrentTime(a);
+              stopMonitor();
+              return;
+            }
+          } else {
+            // ✅ (2) Loop ON: B 도달 시 루프
+            if (!loopGuardRef.current && t >= b - cutMargin) {
+              if (st.repeatTarget > 0 && st.repeatCount >= st.repeatTarget) {
+                ws.pause();
+                stopMonitor();
+                return;
+              }
+
+              loopGuardRef.current = true;
+              loopPendingRef.current = { b };
+              st.incRepeatCount();
+
+              const targetVol = st.volume;
+              const preRoll = Math.max(0, st.preRollSec);
+              const fadeMs = Math.max(0, st.fadeMs);
+              const pauseMs = Math.max(0, st.autoPauseMs);
+
+              const jumpStart = Math.max(0, a - preRoll);
+
+              const doJumpAndPlay = () => {
+                const ws2 = wsRef.current;
+                if (!ws2) return;
+
+                // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
+                if (fadeMs > 0) {
+                  ws2.setVolume(0);
+                  (ws2 as any).play?.(jumpStart);
+                  rampVolume(0, targetVol, fadeMs);
+                } else {
+                  ws2.setVolume(targetVol);
+                  (ws2 as any).play?.(jumpStart);
+                }
+                // loopGuardRef 해제는 아래 pending 확인에서 처리
+              };
+
+              const afterPause = () => {
+                if (pauseMs > 0) {
+                  if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
+                  loopTimerRef.current = window.setTimeout(doJumpAndPlay, pauseMs);
+                } else {
+                  doJumpAndPlay();
+                }
+              };
+
+              if (fadeMs > 0) {
+                rampVolume(targetVol, 0, fadeMs, () => {
+                  ws.pause();
+                  afterPause();
+                });
+              } else {
+                if (pauseMs > 0) ws.pause();
+                afterPause();
+              }
+            }
+          }
+        }
+      }
+
+      // ✅ 루프 점프 직후 “B 이전으로 복귀” 확인 후 guard 해제
+      if (loopGuardRef.current && loopPendingRef.current) {
+        const bp = loopPendingRef.current.b;
+        const EPS_BACK = 0.02;
+        if (t < bp - EPS_BACK) {
+          loopPendingRef.current = null;
+          loopGuardRef.current = false;
+        }
+      }
+
+      monitorRafRef.current = requestAnimationFrame(tick);
+    };
+
+    monitorRafRef.current = requestAnimationFrame(tick);
   };
 
   // ✅ ESC로 구간 초기화(스토어 + UI)
@@ -319,6 +447,9 @@ export default function Waveform() {
     ws.on("play", () => {
       setPlaying(true);
 
+      // ✅ 모바일에서 재생 중 타이밍 보정(루프/원샷 컷 정확도 향상)
+      startMonitor();
+
       const st = usePlayerStore.getState();
       const a0 = st.loopA;
       const b0 = st.loopB;
@@ -332,8 +463,11 @@ export default function Waveform() {
 
       const now = typeof ws.getCurrentTime === "function" ? ws.getCurrentTime() : st.currentTime;
 
-      const EPS = 0.02;
-      const isInsideRemaining = now > a + EPS && now < b - EPS;
+      // ✅ iOS에서 A 근처에서 시작할 때 "A로 다시 점프"하며 seekbar 튐 방지:
+      // A에 거의 붙어있으면 inside로 간주
+      const EPS_START = 0.06;
+      const EPS_END = 0.03;
+      const isInsideRemaining = now >= a - EPS_START && now < b - EPS_END;
 
       if (isInsideRemaining) return;
 
@@ -354,9 +488,21 @@ export default function Waveform() {
       });
     });
 
-    ws.on("pause", () => setPlaying(false));
-    ws.on("finish", () => setPlaying(false));
+    ws.on("pause", () => {
+      setPlaying(false);
+      stopMonitor();
+    });
+    ws.on("finish", () => {
+      setPlaying(false);
+      stopMonitor();
+    });
 
+    // ✅ iOS에서 timeupdate 주기가 불안정할 수 있어서, 재생 중에는 audioprocess도 같이 사용
+    ws.on("audioprocess", (t) => {
+      setCurrentTime(t);
+    });
+
+    // timeupdate: UI 업데이트 + (루프/원샷 로직은 rAF 모니터가 1차 담당)
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
 
@@ -367,6 +513,7 @@ export default function Waveform() {
       const isPlayingNow = typeof ws.isPlaying === "function" ? ws.isPlaying() : false;
 
       // ✅ (1) Loop OFF + AB 설정됨 => "1회 재생 모드"
+      // (모니터가 처리하지만, 데스크탑/일부 환경에서는 여기서도 안정적으로 동작)
       if (!st.loopEnabled && a0 != null && b0 != null) {
         if (loopGuardRef.current || loopPendingRef.current) {
           loopGuardRef.current = false;
@@ -379,9 +526,8 @@ export default function Waveform() {
         const b = Math.max(a0, b0);
         if (b <= a) return;
 
-        const EPS_END = 0.01;
+        const EPS_END = 0.02;
         if (t >= b - EPS_END) {
-          // ✅ B에 도달하면 "정지 + 커서를 A로 되돌림)
           ws.pause();
           ws.setTime(a);
           setCurrentTime(a);
@@ -390,11 +536,12 @@ export default function Waveform() {
       }
 
       // ✅ (2) Loop ON일 때만 반복 로직 실행
+      // (모니터가 처리하지만, guard/pending 해제는 여기서도 도움됨)
       if (!st.loopEnabled || a0 == null || b0 == null) return;
 
       if (loopGuardRef.current && loopPendingRef.current) {
         const bp = loopPendingRef.current.b;
-        const EPS_BACK = 0.01;
+        const EPS_BACK = 0.02;
 
         if (isPlayingNow && t < bp - EPS_BACK) {
           loopPendingRef.current = null;
@@ -404,7 +551,6 @@ export default function Waveform() {
         }
       }
 
-      // ✅ seek(칩 클릭 등)로 timeupdate가 발생해도, "재생 중이 아닐 때"는 반복 로직을 실행하지 않음
       if (!isPlayingNow) return;
 
       const a = Math.min(a0, b0);
@@ -413,57 +559,8 @@ export default function Waveform() {
       if (loopGuardRef.current) return;
 
       if (t >= b) {
-        if (st.repeatTarget > 0 && st.repeatCount >= st.repeatTarget) {
-          ws.pause();
-          return;
-        }
-
-        // ✅ 여기서부터 루프 사이클 시작: guard + pending 세팅
-        loopGuardRef.current = true;
-        loopPendingRef.current = { b };
-        st.incRepeatCount();
-
-        const targetVol = st.volume;
-        const preRoll = Math.max(0, st.preRollSec);
-        const fadeMs = Math.max(0, st.fadeMs);
-        const pauseMs = Math.max(0, st.autoPauseMs);
-
-        const jumpStart = Math.max(0, a - preRoll);
-
-        const doJumpAndPlay = () => {
-          const ws2 = wsRef.current;
-          if (!ws2) return;
-
-          // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
-          if (fadeMs > 0) {
-            ws2.setVolume(0);
-            (ws2 as any).play?.(jumpStart);
-            rampVolume(0, targetVol, fadeMs);
-          } else {
-            ws2.setVolume(targetVol);
-            (ws2 as any).play?.(jumpStart);
-          }
-          // ✅ loopGuardRef 해제는 timeupdate에서 “B 이전 복귀 확인” 후 수행
-        };
-
-        const afterPause = () => {
-          if (pauseMs > 0) {
-            if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
-            loopTimerRef.current = window.setTimeout(doJumpAndPlay, pauseMs);
-          } else {
-            doJumpAndPlay();
-          }
-        };
-
-        if (fadeMs > 0) {
-          rampVolume(targetVol, 0, fadeMs, () => {
-            ws.pause();
-            afterPause();
-          });
-        } else {
-          if (pauseMs > 0) ws.pause();
-          afterPause();
-        }
+        // 여기서는 모니터가 이미 잡는 경우가 많아서, 중복 방지 차원에서만 둠
+        return;
       }
     });
 
@@ -697,6 +794,8 @@ export default function Waveform() {
 
     return () => {
       cancelFade();
+      stopMonitor();
+
       if (loopTimerRef.current) {
         window.clearTimeout(loopTimerRef.current);
         loopTimerRef.current = null;
@@ -732,6 +831,8 @@ export default function Waveform() {
     loopPendingRef.current = null;
     loopGuardRef.current = false;
     oneShotAdjustingRef.current = false;
+
+    stopMonitor();
 
     setReady(false);
     setPlaying(false);
