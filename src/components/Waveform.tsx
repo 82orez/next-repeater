@@ -75,6 +75,10 @@ export default function Waveform() {
     };
   }, []);
 
+  // ✅ Loop 판정용 고주기 모니터(rAF): iOS의 성긴 timeupdate를 보완
+  const loopMonitorRafRef = useRef<number | null>(null);
+  const loopMonitorActiveRef = useRef(false);
+
   // ✅ "Loop OFF + AB 존재" 상태에서 play 이벤트 시, 조건에 따라 A로 점프할지 말지 결정
   const oneShotAdjustingRef = useRef(false);
 
@@ -144,6 +148,113 @@ export default function Waveform() {
       }
     };
     fadeRafRef.current = requestAnimationFrame(step);
+  };
+
+  // ✅ rAF 모니터 stop/start
+  const stopLoopMonitor = () => {
+    loopMonitorActiveRef.current = false;
+    if (loopMonitorRafRef.current) {
+      cancelAnimationFrame(loopMonitorRafRef.current);
+      loopMonitorRafRef.current = null;
+    }
+  };
+
+  const startLoopMonitor = () => {
+    if (loopMonitorActiveRef.current) return;
+    loopMonitorActiveRef.current = true;
+
+    const tick = () => {
+      if (!loopMonitorActiveRef.current) return;
+
+      const ws = wsRef.current;
+      if (ws) {
+        const st = usePlayerStore.getState();
+        const a0 = st.loopA;
+        const b0 = st.loopB;
+
+        const isPlayingNow = typeof ws.isPlaying === "function" ? ws.isPlaying() : false;
+
+        // iOS(터치)에서 timeupdate 지연이 커서 eps를 크게 잡아 “B 직전”에 처리
+        // 필요시 0.20~0.30 범위에서 조정
+        const EPS_LOOP = isTouchLike ? 0.25 : 0.06;
+
+        if (isPlayingNow && a0 != null && b0 != null) {
+          const a = Math.min(a0, b0);
+          const b = Math.max(a0, b0);
+
+          if (b > a) {
+            const t = typeof ws.getCurrentTime === "function" ? ws.getCurrentTime() : st.currentTime;
+
+            // ✅ (1) Loop OFF + AB 존재 => 1회 재생 모드: B 직전에 정지 + A로 복귀
+            if (!st.loopEnabled) {
+              if (t >= b - EPS_LOOP) {
+                ws.pause();
+                ws.setTime(a);
+                st.setCurrentTime(a);
+              }
+            }
+
+            // ✅ (2) Loop ON => 반복 모드: B 직전에 루프 사이클 시작
+            if (st.loopEnabled) {
+              if (!loopGuardRef.current && t >= b - EPS_LOOP) {
+                if (st.repeatTarget > 0 && st.repeatCount >= st.repeatTarget) {
+                  ws.pause();
+                } else {
+                  loopGuardRef.current = true;
+                  loopPendingRef.current = { b };
+                  st.incRepeatCount();
+
+                  const targetVol = st.volume;
+                  const preRoll = Math.max(0, st.preRollSec);
+                  const fadeMs = Math.max(0, st.fadeMs);
+                  const pauseMs = Math.max(0, st.autoPauseMs);
+
+                  const jumpStart = Math.max(0, a - preRoll);
+
+                  const doJumpAndPlay = () => {
+                    const ws2 = wsRef.current;
+                    if (!ws2) return;
+
+                    if (fadeMs > 0) {
+                      ws2.setVolume(0);
+                      (ws2 as any).play?.(jumpStart);
+                      rampVolume(0, targetVol, fadeMs);
+                    } else {
+                      ws2.setVolume(targetVol);
+                      (ws2 as any).play?.(jumpStart);
+                    }
+                    // loopGuard 해제는 timeupdate의 “B 이전 복귀 확인”에서 수행
+                  };
+
+                  const afterPause = () => {
+                    if (pauseMs > 0) {
+                      if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
+                      loopTimerRef.current = window.setTimeout(doJumpAndPlay, pauseMs);
+                    } else {
+                      doJumpAndPlay();
+                    }
+                  };
+
+                  if (fadeMs > 0) {
+                    rampVolume(targetVol, 0, fadeMs, () => {
+                      ws.pause();
+                      afterPause();
+                    });
+                  } else {
+                    if (pauseMs > 0) ws.pause();
+                    afterPause();
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      loopMonitorRafRef.current = requestAnimationFrame(tick);
+    };
+
+    loopMonitorRafRef.current = requestAnimationFrame(tick);
   };
 
   // ✅ 스냅 유틸
@@ -318,6 +429,7 @@ export default function Waveform() {
     // - 그 외( A 이전 / B 근처·이후 )면 "A부터 1회 재생"을 위해 A로 점프
     ws.on("play", () => {
       setPlaying(true);
+      startLoopMonitor();
 
       const st = usePlayerStore.getState();
       const a0 = st.loopA;
@@ -354,8 +466,15 @@ export default function Waveform() {
       });
     });
 
-    ws.on("pause", () => setPlaying(false));
-    ws.on("finish", () => setPlaying(false));
+    ws.on("pause", () => {
+      setPlaying(false);
+      stopLoopMonitor();
+    });
+
+    ws.on("finish", () => {
+      setPlaying(false);
+      stopLoopMonitor();
+    });
 
     ws.on("timeupdate", (t) => {
       setCurrentTime(t);
@@ -696,6 +815,7 @@ export default function Waveform() {
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
+      stopLoopMonitor();
       cancelFade();
       if (loopTimerRef.current) {
         window.clearTimeout(loopTimerRef.current);
@@ -732,6 +852,9 @@ export default function Waveform() {
     loopPendingRef.current = null;
     loopGuardRef.current = false;
     oneShotAdjustingRef.current = false;
+
+    // ✅ 오디오 교체 중에는 루프 모니터 중지
+    stopLoopMonitor();
 
     setReady(false);
     setPlaying(false);
