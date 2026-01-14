@@ -16,7 +16,7 @@ const RB_TMP_ID = "rb_tmp";
 const SNAP_SEC = 0.01;
 
 // ✅ iOS/모바일 seek 튕김 재현 시 콘솔 로그를 보고 싶으면 true로
-const DEBUG_IOS_SEEK = false;
+const DEBUG_IOS_SEEK = true;
 type DebugEventName =
   | "ready"
   | "play"
