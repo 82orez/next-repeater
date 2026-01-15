@@ -22,6 +22,7 @@ import Waveform from "@/components/Waveform";
 import BookmarkPanel from "@/components/BookmarkPanel";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
+import { BsRepeat, BsRepeat1 } from "react-icons/bs";
 
 export default function Player() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -428,7 +429,7 @@ export default function Player() {
               }}
               disabled={!canLoop}
               className={clsx(
-                "inline-flex w-[77px] items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
+                "flex h-[38px] w-12 items-center justify-center gap-2 rounded-2xl px-1 py-1 text-sm font-medium shadow-sm",
                 canLoop
                   ? loopEnabled
                     ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -436,8 +437,7 @@ export default function Player() {
                   : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
               )}
               title="반복 토글 (R)">
-              <Repeat className="h-4 w-4" />
-              {loopEnabled ? "ON" : "OFF"}
+              {loopEnabled ? <BsRepeat size={20} /> : <BsRepeat1 size={24} />}
             </button>
 
             {/* Reset loop */}
