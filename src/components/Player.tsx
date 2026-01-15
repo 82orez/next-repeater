@@ -23,6 +23,7 @@ import BookmarkPanel from "@/components/BookmarkPanel";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
+import { TbRepeatOff } from "react-icons/tb";
 
 export default function Player() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -437,7 +438,7 @@ export default function Player() {
                   : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
               )}
               title="반복 토글 (R)">
-              {loopEnabled ? <BsRepeat size={20} /> : <BsRepeat1 size={24} />}
+              {canLoop ? loopEnabled ? <BsRepeat size={20} /> : <BsRepeat1 size={24} /> : <TbRepeatOff size={22} />}
             </button>
 
             {/* Reset loop */}
