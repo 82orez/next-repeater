@@ -6,7 +6,6 @@ import clsx from "clsx";
 import {
   Pause,
   Play,
-  Repeat,
   Flag,
   Upload,
   Timer,
