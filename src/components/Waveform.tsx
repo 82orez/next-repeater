@@ -56,6 +56,10 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
   // ✅ 로딩 인디케이터
   const [isLoadingWave, setIsLoadingWave] = useState(false);
   const [loadingPct, setLoadingPct] = useState<number | null>(null);
+  const [loadingStage, setLoadingStage] = useState<"idle" | "loading" | "analyzing">("idle");
+  const [loadingError, setLoadingError] = useState<string | null>(null);
+  const loadingStartRef = useRef<number | null>(null);
+  const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
 
   // ✅ 터치 기반 감지: (hover none) 또는 (pointer coarse)면 region drag/resize 비활성화
   const [isTouchLike, setIsTouchLike] = useState(false);
@@ -93,6 +97,7 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
   const setTime = usePlayerStore((s) => s.setTime); // ✅ 칩 클릭 시 seek
 
   const mediaUrl = usePlayerStore((s) => s.mediaUrl);
+  const mediaKind = usePlayerStore((s) => s.mediaKind);
   const playbackRate = usePlayerStore((s) => s.playbackRate);
   const volume = usePlayerStore((s) => s.volume);
 
@@ -296,8 +301,23 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
     setWs(ws);
 
     ws.on("loading", (pct) => {
+      // ✅ 대용량 MP4는 (파일 읽기/다운로드) 이후 (디코드/파형 분석) 시간이 길 수 있음
+      setLoadingError(null);
       setIsLoadingWave(true);
-      setLoadingPct(typeof pct === "number" ? pct : null);
+      setLoadingStage((prev) => (prev === "idle" ? "loading" : prev));
+
+      const p = typeof pct === "number" ? pct : null;
+      setLoadingPct(p);
+      if (p != null && p >= 100) setLoadingStage("analyzing");
+    });
+
+    // wavesurfer v7: decode 이벤트가 존재하면 “파형 분석” 단계로 전환
+    // (빌드/번들 구성에 따라 없을 수 있으니 any로 안전 처리)
+    (ws as any).on?.("decode", () => {
+      if (!usePlayerStore.getState().mediaUrl) return;
+      setLoadingError(null);
+      setIsLoadingWave(true);
+      setLoadingStage("analyzing");
     });
 
     ws.on("ready", () => {
@@ -311,8 +331,22 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
 
       setIsLoadingWave(false);
       setLoadingPct(null);
+      setLoadingStage("idle");
+      setLoadingError(null);
+      loadingStartRef.current = null;
+      setLoadingElapsedSec(0);
 
       syncRegionInteractivity();
+    });
+
+    ws.on("error", (e: any) => {
+      const msg = typeof e === "string" ? e : e?.message ? String(e.message) : "미디어 로딩 중 오류가 발생했어요.";
+      setLoadingError(msg);
+      setIsLoadingWave(false);
+      setLoadingPct(null);
+      setLoadingStage("idle");
+      loadingStartRef.current = null;
+      setLoadingElapsedSec(0);
     });
 
     // ✅ Loop OFF + AB 존재일 때:
@@ -745,14 +779,37 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
 
     if (mediaUrl) {
       setIsLoadingWave(true);
+      setLoadingStage("loading");
+      setLoadingError(null);
+      loadingStartRef.current = performance.now();
+      setLoadingElapsedSec(0);
       setLoadingPct(null);
       ws.load(mediaUrl);
     } else {
       setIsLoadingWave(false);
       setLoadingPct(null);
+      setLoadingStage("idle");
+      setLoadingError(null);
+      loadingStartRef.current = null;
+      setLoadingElapsedSec(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaUrl]);
+
+  // ✅ 대용량 미디어: 로딩/분석 시간 경과 표시
+  useEffect(() => {
+    if (!isLoadingWave) return;
+    if (loadingStartRef.current == null) loadingStartRef.current = performance.now();
+
+    const t = window.setInterval(() => {
+      const st = loadingStartRef.current;
+      if (st == null) return;
+      const sec = Math.floor((performance.now() - st) / 1000);
+      setLoadingElapsedSec(sec);
+    }, 250);
+
+    return () => window.clearInterval(t);
+  }, [isLoadingWave]);
 
   useEffect(() => {
     wsRef.current?.setPlaybackRate(playbackRate);
@@ -839,12 +896,29 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
           <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
             <div className="flex flex-col">
-              <div className="text-sm font-semibold text-zinc-800">Loading audio…</div>
+              <div className="text-sm font-semibold text-zinc-800">{loadingStage === "analyzing" ? "Analyzing waveform…" : "Loading media…"}</div>
               <div className="text-xs text-zinc-500">
-                {loadingPct != null ? `${Math.max(0, Math.min(100, Math.round(loadingPct)))}%` : "잠시만 기다려주세요"}
+                {loadingStage === "loading" && loadingPct != null
+                  ? `${Math.max(0, Math.min(100, Math.round(loadingPct)))}% · ${mediaKind.toUpperCase()}`
+                  : `${loadingElapsedSec}s · ${mediaKind.toUpperCase()}`}
               </div>
+
+              {loadingPct != null && loadingStage === "loading" && (
+                <div className="mt-2 h-2 w-56 overflow-hidden rounded-full bg-zinc-100">
+                  <div className="h-full rounded-full bg-zinc-900/80" style={{ width: `${Math.max(0, Math.min(100, loadingPct))}%` }} />
+                </div>
+              )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ✅ 로딩 오류(대용량/코덱/브라우저 제한 등) */}
+      {!isLoadingWave && loadingError && (
+        <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div className="font-semibold">미디어 로딩 실패</div>
+          <div className="mt-1 text-xs text-rose-700/90">{loadingError}</div>
+          <div className="mt-2 text-[11px] text-rose-700/80">팁: iOS Safari에서는 재생 버튼을 한 번 눌러야 로딩/분석이 시작될 수 있어요.</div>
         </div>
       )}
 
