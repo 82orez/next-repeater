@@ -16,7 +16,7 @@ export default function BookmarkPanel({ className }: Props) {
   const [q, setQ] = useState("");
   const [tag, setTag] = useState("");
 
-  const audioUrl = usePlayerStore((s) => s.audioUrl);
+  const mediaUrl = usePlayerStore((s) => s.mediaUrl);
   const currentTime = usePlayerStore((s) => s.currentTime);
 
   const loopA = usePlayerStore((s) => s.loopA);
@@ -52,8 +52,8 @@ export default function BookmarkPanel({ className }: Props) {
     return Array.from(s).sort((a, b) => a.localeCompare(b));
   }, [bookmarks]);
 
-  const canAddPoint = !!audioUrl;
-  const canAddRegion = !!audioUrl && loopA != null && loopB != null && loopB > loopA;
+  const canAddPoint = !!mediaUrl;
+  const canAddRegion = !!mediaUrl && loopA != null && loopB != null && loopB > loopA;
 
   const onAddPoint = () => {
     if (!canAddPoint) return;

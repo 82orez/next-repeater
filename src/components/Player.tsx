@@ -18,6 +18,7 @@ import {
   ArrowRightFromLine,
 } from "lucide-react";
 import Waveform from "@/components/Waveform";
+import MediaView from "@/components/MediaView";
 import BookmarkPanel from "@/components/BookmarkPanel";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
@@ -26,10 +27,15 @@ import { TbRepeatOff } from "react-icons/tb";
 
 export default function Player() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRef = useRef<HTMLVideoElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
 
   const ws = usePlayerStore((s) => s.ws);
 
-  const audioUrl = usePlayerStore((s) => s.audioUrl);
+  const mediaUrl = usePlayerStore((s) => s.mediaUrl);
+  const mediaKind = usePlayerStore((s) => s.mediaKind);
+  const showVideo = usePlayerStore((s) => s.showVideo);
+  const setShowVideo = usePlayerStore((s) => s.setShowVideo);
   const fileName = usePlayerStore((s) => s.fileName);
 
   const isReady = usePlayerStore((s) => s.isReady);
@@ -83,10 +89,37 @@ export default function Player() {
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
+
+    // ✅ 이전 ObjectURL 정리(메모리 누수 방지)
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+
     const url = URL.createObjectURL(f);
-    setSource({ audioUrl: url, fileName: f.name });
-    upsertRecent({ fileName: f.name, audioUrl: url, lastTime: 0 });
+    objectUrlRef.current = url;
+
+    const kind = f.type?.startsWith("video/") ? "video" : "audio";
+
+    setSource({ mediaUrl: url, mediaKind: kind, fileName: f.name });
+    upsertRecent({ fileName: f.name, mediaUrl: url, mediaKind: kind, lastTime: 0 });
+
+    // ✅ iOS/Safari에서 metadata 로딩 트리거가 필요한 경우를 대비
+    if (mediaRef.current) {
+      try {
+        mediaRef.current.src = url;
+        mediaRef.current.load();
+      } catch {
+        // ignore
+      }
+    }
   };
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    };
+  }, []);
 
   const loopLabel = useMemo(() => {
     if (loopA == null && loopB == null) return "A/B 미설정";
@@ -128,7 +161,7 @@ export default function Player() {
     setTime(next.start);
   };
 
-  const controlsDisabled = !audioUrl || !ws;
+  const controlsDisabled = !mediaUrl || !ws;
 
   // ✅ A(-3s) 버튼 동작:
   // 1) A/B 미설정이면: -3초 seek
@@ -171,10 +204,10 @@ export default function Player() {
   }, [canLoop, controlsDisabled, seekBy, loopA, loopB, duration, setLoopEnabled, setLoopA, setLoopB, resetRepeatCount, setTime, play]);
 
   useEffect(() => {
-    if (!audioUrl) return;
-    const id = window.setInterval(() => updateRecentTime(audioUrl, currentTime), 5000);
+    if (!mediaUrl) return;
+    const id = window.setInterval(() => updateRecentTime(mediaUrl, currentTime), 5000);
     return () => window.clearInterval(id);
-  }, [audioUrl, currentTime, updateRecentTime]);
+  }, [mediaUrl, currentTime, updateRecentTime]);
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -200,7 +233,7 @@ export default function Player() {
 
       if (ev.code === "Space") {
         ev.preventDefault();
-        if (!audioUrl) return;
+        if (!mediaUrl) return;
         playPause();
         return;
       }
@@ -274,7 +307,7 @@ export default function Player() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
-    audioUrl,
+    mediaUrl,
     canLoop,
     currentTime,
     loopEnabled,
@@ -305,19 +338,31 @@ export default function Player() {
             <div className="text-sm text-zinc-500">현재 파일</div>
             <div className="truncate text-base font-medium text-zinc-900">{fileName ?? "오디오 파일을 선택해 주세요"}</div>
             <div className="mt-1 text-xs text-zinc-500">
-              {fmtTime(currentTime)} / {fmtTime(duration)} {audioUrl && !isReady ? "(로딩 중…)" : ""}
+              {fmtTime(currentTime)} / {fmtTime(duration)} {mediaUrl && !isReady ? "(로딩 중…)" : ""}
             </div>
           </div>
 
           {/* 상단: 파일 불러오기 */}
           <div className="flex flex-wrap items-center gap-2">
-            <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFileChange} />
+            <input ref={fileInputRef} type="file" accept="audio/*,video/mp4,video/*" className="hidden" onChange={onFileChange} />
             <button
               onClick={onPickFile}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
               <Upload className="h-4 w-4" />
-              오디오 불러오기
+              미디어 불러오기
             </button>
+            {mediaKind === "video" ? (
+              <button
+                onClick={() => setShowVideo(!showVideo)}
+                className={clsx(
+                  "inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-medium shadow-sm",
+                  showVideo
+                    ? "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
+                    : "border-zinc-300 bg-zinc-50 text-zinc-700 hover:bg-zinc-100",
+                )}>
+                {showVideo ? "비디오 숨기기" : "비디오 보기"}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -376,7 +421,8 @@ export default function Player() {
 
         {/* Waveform */}
         <div className="mt-5">
-          <Waveform />
+          <MediaView ref={mediaRef} mediaUrl={mediaUrl} mediaKind={mediaKind} showVideo={showVideo} />
+          <Waveform mediaRef={mediaRef} />
         </div>
 
         {/* ✅ Transport */}
@@ -401,7 +447,7 @@ export default function Player() {
                 setLoopA(currentTime);
                 resetRepeatCount();
               }}
-              disabled={!audioUrl}
+              disabled={!mediaUrl}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title="A 지정 (KeyA)">
               <Flag className="h-4 w-4" /> A
@@ -414,7 +460,7 @@ export default function Player() {
                 resetRepeatCount();
                 setLoopEnabled(true);
               }}
-              disabled={!audioUrl}
+              disabled={!mediaUrl}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title="B 지정 (KeyB)">
               <Flag className="h-4 w-4" /> B
@@ -448,7 +494,7 @@ export default function Player() {
                 setLoopEnabled(false);
                 resetRepeatCount();
               }}
-              disabled={!audioUrl}
+              disabled={!mediaUrl}
               className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
               title="구간 초기화 (Esc)">
               <RotateCcw className="h-4 w-4" />

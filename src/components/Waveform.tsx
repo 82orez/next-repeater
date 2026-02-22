@@ -29,7 +29,7 @@ function fmtTimeCS(sec: number) {
   return `${pad2(mm)}:${pad2(ss)}.${pad2(cs)}`;
 }
 
-export default function Waveform() {
+export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLVideoElement | null> }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
 
@@ -92,7 +92,7 @@ export default function Waveform() {
 
   const setTime = usePlayerStore((s) => s.setTime); // ✅ 칩 클릭 시 seek
 
-  const audioUrl = usePlayerStore((s) => s.audioUrl);
+  const mediaUrl = usePlayerStore((s) => s.mediaUrl);
   const playbackRate = usePlayerStore((s) => s.playbackRate);
   const volume = usePlayerStore((s) => s.volume);
 
@@ -264,6 +264,7 @@ export default function Waveform() {
 
   useEffect(() => {
     if (!containerRef.current) return;
+    if (!mediaRef.current) return;
 
     const regions = Regions.create();
 
@@ -280,6 +281,7 @@ export default function Waveform() {
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
+      media: mediaRef.current ?? undefined,
       height: 150,
       normalize: true,
       cursorWidth: 1,
@@ -741,16 +743,16 @@ export default function Waveform() {
     clearAllRegions();
     cancelFade();
 
-    if (audioUrl) {
+    if (mediaUrl) {
       setIsLoadingWave(true);
       setLoadingPct(null);
-      ws.load(audioUrl);
+      ws.load(mediaUrl);
     } else {
       setIsLoadingWave(false);
       setLoadingPct(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioUrl]);
+  }, [mediaUrl]);
 
   useEffect(() => {
     wsRef.current?.setPlaybackRate(playbackRate);

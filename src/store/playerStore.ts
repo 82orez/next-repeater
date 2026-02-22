@@ -5,6 +5,8 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type WaveSurfer from "wavesurfer.js";
 
+export type MediaKind = "audio" | "video";
+
 export type Bookmark = {
   id: string;
   type: "POINT" | "REGION";
@@ -18,7 +20,8 @@ export type Bookmark = {
 
 type RecentItem = {
   fileName: string;
-  audioUrl: string;
+  mediaUrl: string;
+  mediaKind: MediaKind;
   lastTime: number;
   lastOpenedAt: number;
 };
@@ -27,8 +30,12 @@ type PlayerState = {
   ws: WaveSurfer | null;
   setWs: (ws: WaveSurfer | null) => void;
 
-  audioUrl: string | null;
+  mediaUrl: string | null;
+  mediaKind: MediaKind;
   fileName: string | null;
+
+  showVideo: boolean;
+  setShowVideo: (v: boolean) => void;
 
   isReady: boolean;
   isPlaying: boolean;
@@ -56,7 +63,7 @@ type PlayerState = {
   bookmarks: Bookmark[];
   recent: RecentItem[];
 
-  setSource: (payload: { audioUrl: string; fileName?: string | null }) => void;
+  setSource: (payload: { mediaUrl: string; mediaKind: MediaKind; fileName?: string | null }) => void;
   setReady: (ready: boolean) => void;
   setPlaying: (playing: boolean) => void;
   setDuration: (duration: number) => void;
@@ -85,8 +92,8 @@ type PlayerState = {
   updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
   removeBookmark: (id: string) => void;
 
-  upsertRecent: (item: { fileName: string; audioUrl: string; lastTime: number }) => void;
-  updateRecentTime: (audioUrl: string, lastTime: number) => void;
+  upsertRecent: (item: { fileName: string; mediaUrl: string; mediaKind: MediaKind; lastTime: number }) => void;
+  updateRecentTime: (mediaUrl: string, lastTime: number) => void;
 
   playPause: () => void;
   play: () => void;
@@ -96,8 +103,7 @@ type PlayerState = {
   seekBy: (deltaSeconds: number) => void;
 };
 
-const isBrowser = typeof window !== "undefined";
-const storage = isBrowser ? createJSONStorage(() => localStorage) : undefined;
+const storage = createJSONStorage(() => localStorage);
 
 export const usePlayerStore = create<PlayerState>()(
   persist(
@@ -105,45 +111,46 @@ export const usePlayerStore = create<PlayerState>()(
       ws: null,
       setWs: (ws) => set({ ws }),
 
-      audioUrl: null,
+      mediaUrl: null,
+      mediaKind: "audio",
       fileName: null,
+
+      showVideo: true,
+      setShowVideo: (v) => set({ showVideo: v }),
 
       isReady: false,
       isPlaying: false,
       duration: 0,
       currentTime: 0,
 
-      playbackRate: 1,
-      volume: 1,
+      playbackRate: 1.0,
+      volume: 1.0,
 
-      // ✅ 기본 zoom
       zoomPps: 80,
-
       setZoomPps: (pps) => {
-        const v = Math.min(800, Math.max(20, Math.round(pps)));
-        set({ zoomPps: v });
         const ws = get().ws;
-        if (ws) ws.zoom(v);
+        if (ws) ws.zoom(pps);
+        set({ zoomPps: pps });
       },
 
       loopEnabled: false,
       loopA: null,
       loopB: null,
 
-      // ✅ defaults
-      autoPauseMs: 0, // Auto Pause: 0ms (default)
-      repeatTarget: 0, // Repeat Limit: 기본 0(무제한)
+      autoPauseMs: 0,
+      repeatTarget: 0,
       repeatCount: 0,
 
-      preRollSec: 0, // Pre-roll (sec): 0
-      fadeMs: 0, // Fade (ms): 0
+      preRollSec: 0,
+      fadeMs: 0,
 
       bookmarks: [],
       recent: [],
 
-      setSource: ({ audioUrl, fileName }) =>
+      setSource: ({ mediaUrl, mediaKind, fileName }) => {
         set({
-          audioUrl,
+          mediaUrl,
+          mediaKind,
           fileName: fileName ?? null,
           isReady: false,
           isPlaying: false,
@@ -153,59 +160,39 @@ export const usePlayerStore = create<PlayerState>()(
           loopA: null,
           loopB: null,
           repeatCount: 0,
-        }),
-
-      setReady: (isReady) => set({ isReady }),
-      setPlaying: (isPlaying) => set({ isPlaying }),
-      setDuration: (duration) => set({ duration }),
-      setCurrentTime: (currentTime) => set({ currentTime }),
-
-      setPlaybackRate: (playbackRate) => {
-        set({ playbackRate });
-        const ws = get().ws;
-        if (ws) ws.setPlaybackRate(playbackRate);
+        });
       },
 
-      setVolume: (volume) => {
-        const v = Math.min(1, Math.max(0, volume));
-        set({ volume: v });
+      setReady: (ready) => set({ isReady: ready }),
+      setPlaying: (playing) => set({ isPlaying: playing }),
+      setDuration: (duration) => set({ duration }),
+      setCurrentTime: (t) => set({ currentTime: t }),
+
+      setPlaybackRate: (r) => {
+        const ws = get().ws;
+        if (ws) ws.setPlaybackRate(r);
+        set({ playbackRate: r });
+      },
+
+      setVolume: (v) => {
         const ws = get().ws;
         if (ws) ws.setVolume(v);
+        set({ volume: v });
       },
 
-      // ✅ 원자적 A/B 세팅
-      setLoopRange: (a, b) => {
-        if (a == null && b == null) {
-          set({ loopA: null, loopB: null });
-          return;
-        }
-        if (a != null && b != null) {
-          const start = Math.min(a, b);
-          const end = Math.max(a, b);
-          set({ loopA: start, loopB: end });
-          return;
-        }
-        set({ loopA: a ?? null, loopB: b ?? null });
-      },
+      setLoopRange: (a, b) => set({ loopA: a, loopB: b }),
 
-      setLoopA: (loopA) => {
-        const b = get().loopB;
-        get().setLoopRange(loopA, b);
-      },
+      setLoopA: (t) => set({ loopA: t }),
+      setLoopB: (t) => set({ loopB: t }),
 
-      setLoopB: (loopB) => {
-        const a = get().loopA;
-        get().setLoopRange(a, loopB);
-      },
-
-      setLoopEnabled: (loopEnabled) => set({ loopEnabled }),
-      setAutoPauseMs: (autoPauseMs) => set({ autoPauseMs }),
-      setRepeatTarget: (repeatTarget) => set({ repeatTarget }),
+      setLoopEnabled: (v) => set({ loopEnabled: v }),
+      setAutoPauseMs: (ms) => set({ autoPauseMs: ms }),
+      setRepeatTarget: (n) => set({ repeatTarget: n }),
       incRepeatCount: () => set({ repeatCount: get().repeatCount + 1 }),
       resetRepeatCount: () => set({ repeatCount: 0 }),
 
-      setPreRollSec: (sec) => set({ preRollSec: Math.min(2, Math.max(0, sec)) }),
-      setFadeMs: (ms) => set({ fadeMs: Math.min(800, Math.max(0, ms)) }),
+      setPreRollSec: (sec) => set({ preRollSec: sec }),
+      setFadeMs: (ms) => set({ fadeMs: ms }),
 
       addBookmark: (b) => set({ bookmarks: [b, ...get().bookmarks] }),
       updateBookmark: (id, patch) => set({ bookmarks: get().bookmarks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }),
@@ -213,13 +200,13 @@ export const usePlayerStore = create<PlayerState>()(
 
       upsertRecent: (item) => {
         const next: RecentItem[] = [
-          { fileName: item.fileName, audioUrl: item.audioUrl, lastTime: item.lastTime, lastOpenedAt: Date.now() },
-          ...get().recent.filter((r) => r.audioUrl !== item.audioUrl),
+          { fileName: item.fileName, mediaUrl: item.mediaUrl, mediaKind: item.mediaKind, lastTime: item.lastTime, lastOpenedAt: Date.now() },
+          ...get().recent.filter((r) => r.mediaUrl !== item.mediaUrl),
         ].slice(0, 10);
         set({ recent: next });
       },
 
-      updateRecentTime: (audioUrl, lastTime) => set({ recent: get().recent.map((r) => (r.audioUrl === audioUrl ? { ...r, lastTime } : r)) }),
+      updateRecentTime: (mediaUrl, lastTime) => set({ recent: get().recent.map((r) => (r.mediaUrl === mediaUrl ? { ...r, lastTime } : r)) }),
 
       playPause: () => get().ws?.playPause(),
       play: () => get().ws?.play(),
@@ -258,6 +245,7 @@ export const usePlayerStore = create<PlayerState>()(
         fadeMs: s.fadeMs,
         bookmarks: s.bookmarks,
         recent: s.recent,
+        showVideo: s.showVideo,
       }),
     },
   ),
