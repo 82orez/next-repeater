@@ -20,6 +20,7 @@ import {
 import Waveform from "@/components/Waveform";
 import MediaView from "@/components/MediaView";
 import BookmarkPanel from "@/components/BookmarkPanel";
+import Recorder from "@/components/Recorder";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
@@ -485,6 +486,9 @@ export default function Player() {
               title="반복 토글 (R)">
               {canLoop ? loopEnabled ? <BsRepeat size={20} /> : <BsRepeat1 size={24} /> : <TbRepeatOff size={22} />}
             </button>
+
+            {/* 내 발음 녹음 */}
+            <Recorder />
 
             {/* Reset loop */}
             <button
