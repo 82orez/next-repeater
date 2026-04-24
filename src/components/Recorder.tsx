@@ -192,6 +192,9 @@ export default function Recorder() {
 
       {(phase === "ready" || phase === "playing") && (
         <>
+          <button onClick={startRecording} className={btnBase} title="다시 녹음" aria-label="다시 녹음">
+            <Mic className="h-4 w-4" />
+          </button>
           <button
             onClick={phase === "playing" ? pauseRecording : playRecording}
             className={btnBase}
@@ -200,14 +203,8 @@ export default function Recorder() {
             {phase === "playing" ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           </button>
           <span className="text-xs text-zinc-500 tabular-nums">{fmtElapsed(durationSec * 1000)}</span>
-          <button onClick={startRecording} className={btnBase} title="다시 녹음" aria-label="다시 녹음">
-            <Mic className="h-4 w-4" />
-          </button>
-          <button
-            onClick={clearRecording}
-            className={clsx(btnBase, "px-2")}
-            title="녹음본 삭제"
-            aria-label="녹음본 삭제">
+
+          <button onClick={clearRecording} className={clsx(btnBase, "px-2")} title="녹음본 삭제" aria-label="녹음본 삭제">
             <Trash2 className="h-4 w-4" />
           </button>
         </>

@@ -487,9 +487,6 @@ export default function Player() {
               {canLoop ? loopEnabled ? <BsRepeat size={20} /> : <BsRepeat1 size={24} /> : <TbRepeatOff size={22} />}
             </button>
 
-            {/* 내 발음 녹음 */}
-            <Recorder />
-
             {/* Reset loop */}
             <button
               onClick={() => {
@@ -581,6 +578,12 @@ export default function Player() {
                 disabled={!ws}
               />
             </div>
+          </div>
+
+          {/* 내 발음 녹음 (분리 배치) */}
+          <div className="mt-3 flex flex-col items-center justify-center gap-3 border-t border-zinc-100 pt-3">
+            <div className="text-xs font-medium text-zinc-600">내 발음 녹음</div>
+            <Recorder />
           </div>
 
           {/* 상태 텍스트 */}
