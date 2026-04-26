@@ -582,7 +582,7 @@ export default function Player() {
 
           {/* 내 발음 녹음 (분리 배치) */}
           <div className="mt-3 flex flex-col items-center justify-center gap-3 border-t border-zinc-100 pt-3">
-            <div className="text-xs font-medium text-zinc-600">내 발음 녹음</div>
+            <div className="text-sm font-medium text-zinc-600">내 발음 녹음</div>
             <Recorder />
           </div>
 
