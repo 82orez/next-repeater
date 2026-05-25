@@ -45,6 +45,7 @@ export default function TtsClient() {
 
   const onGenerate = async () => {
     if (!text.trim() || isLoading) return;
+    if (!window.confirm("해당 텍스트로 음성을 생성하시겠습니까? OpenAI API가 호출되고 token이 소모됩니다.")) return;
 
     setIsLoading(true);
     setError(null);
@@ -112,8 +113,7 @@ export default function TtsClient() {
                 className={clsx(
                   "rounded-xl border px-3 py-1.5 text-sm font-medium transition-colors",
                   model === m.id ? "border-blue-600 bg-blue-50 text-blue-700" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-100",
-                )}
-              >
+                )}>
                 {m.label}
               </button>
             ))}
@@ -131,8 +131,7 @@ export default function TtsClient() {
                 className={clsx(
                   "rounded-xl border px-3 py-1.5 text-sm font-medium capitalize transition-colors",
                   voice === v ? "border-blue-600 bg-blue-50 text-blue-700" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-100",
-                )}
-              >
+                )}>
                 {v}
               </button>
             ))}
@@ -146,8 +145,7 @@ export default function TtsClient() {
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-blue-200"
-            >
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-blue-200">
               {FORMATS.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.label}
@@ -175,8 +173,7 @@ export default function TtsClient() {
                   className={clsx(
                     "rounded-lg border px-2 py-0.5 text-xs font-medium transition-colors",
                     speed === s ? "border-blue-600 bg-blue-50 text-blue-700" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-100",
-                  )}
-                >
+                  )}>
                   {s}x
                 </button>
               ))}
@@ -190,11 +187,8 @@ export default function TtsClient() {
           disabled={!text.trim() || isLoading}
           className={clsx(
             "flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition-colors",
-            !text.trim() || isLoading
-              ? "cursor-not-allowed bg-zinc-300 text-zinc-500"
-              : "bg-zinc-900 text-white hover:bg-zinc-800",
-          )}
-        >
+            !text.trim() || isLoading ? "cursor-not-allowed bg-zinc-300 text-zinc-500" : "bg-zinc-900 text-white hover:bg-zinc-800",
+          )}>
           {isLoading ? (
             <>
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-400 border-t-white" />
@@ -219,8 +213,7 @@ export default function TtsClient() {
             <a
               href={audioUrl}
               download={`tts-output.${format}`}
-              className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-            >
+              className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
               <Download className="h-4 w-4" />
               다운로드
             </a>
