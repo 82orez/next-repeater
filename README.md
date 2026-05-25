@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Repeat Player
 
-## Getting Started
+오디오/비디오 A-B 구간 반복 재생기 + 텍스트 음성 변환(TTS) 도구.
 
-First, run the development server:
+## 기능
+
+### Repeat Player (`/`)
+
+- 오디오·비디오 파일 로드 및 파형(waveform) 시각화
+- A-B 구간 설정 및 반복 재생 (반복 횟수, 자동 일시정지, 프리롤, 페이드 지원)
+- 우클릭 드래그로 구간 생성, Ctrl/Cmd+휠로 줌
+- 북마크 (포인트/리전) 및 구문 단위 이전/다음 탐색
+- 재생 속도·볼륨 조절
+- 녹음 기능
+
+### 텍스트 음성 변환 (`/tts`)
+
+- OpenAI TTS API를 이용한 텍스트 → 음성 변환
+- 모델 선택 (tts-1 / tts-1-hd)
+- 10종 음성 선택 (alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer)
+- 출력 형식 (MP3, Opus, AAC, FLAC, WAV, PCM) 및 속도 조절
+- 브라우저 미리듣기 및 다운로드
+
+## 시작하기
+
+### 설치
+
+```bash
+npm install
+```
+
+### 환경 변수
+
+TTS 기능을 사용하려면 프로젝트 루트에 `.env.local` 파일을 생성하고 OpenAI API 키를 설정하세요:
+
+```
+OPENAI_API_KEY=sk-your-api-key-here
+```
+
+### 개발 서버
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+[http://localhost:3000](http://localhost:3000)에서 Repeat Player를, [http://localhost:3000/tts](http://localhost:3000/tts)에서 TTS 페이지를 확인할 수 있습니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 빌드
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm run start
+```
 
-## Learn More
+## 기술 스택
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Next.js 16](https://nextjs.org) (App Router, Turbopack)
+- [React 19](https://react.dev)
+- [Tailwind CSS v4](https://tailwindcss.com)
+- [Zustand](https://github.com/pmndrs/zustand) (상태 관리)
+- [WaveSurfer.js](https://wavesurfer.xyz) (파형 시각화)
+- [OpenAI API](https://platform.openai.com/docs/guides/text-to-speech) (TTS)
