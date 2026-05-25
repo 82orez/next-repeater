@@ -187,7 +187,7 @@ export default function TtsClient() {
           disabled={!text.trim() || isLoading}
           className={clsx(
             "flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition-colors",
-            !text.trim() || isLoading ? "cursor-not-allowed bg-zinc-300 text-zinc-500" : "bg-zinc-900 text-white hover:bg-zinc-800",
+            !text.trim() || isLoading ? "cursor-not-allowed bg-zinc-300 text-zinc-500" : "cursor-pointer bg-zinc-900 text-white hover:bg-zinc-800",
           )}>
           {isLoading ? (
             <>
