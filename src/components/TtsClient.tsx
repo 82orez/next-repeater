@@ -5,7 +5,18 @@ import Link from "next/link";
 import clsx from "clsx";
 import { ArrowLeft, Download, Volume2 } from "lucide-react";
 
-const VOICES = ["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer"] as const;
+const VOICES = [
+  { id: "alloy", label: "Alloy", desc: "중성적이고 균형 잡힌 톤" },
+  { id: "ash", label: "Ash", desc: "부드럽고 차분한 남성 톤" },
+  { id: "ballad", label: "Ballad", desc: "감성적이고 표현력 있는 톤" },
+  { id: "coral", label: "Coral", desc: "따뜻하고 친근한 여성 톤" },
+  { id: "echo", label: "Echo", desc: "명확하고 또렷한 남성 톤" },
+  { id: "fable", label: "Fable", desc: "이야기체의 부드러운 톤" },
+  { id: "onyx", label: "Onyx", desc: "깊고 무게감 있는 남성 톤" },
+  { id: "nova", label: "Nova", desc: "밝고 활기찬 여성 톤" },
+  { id: "sage", label: "Sage", desc: "차분하고 신뢰감 있는 톤" },
+  { id: "shimmer", label: "Shimmer", desc: "맑고 경쾌한 여성 톤" },
+] as const;
 const MODELS = [
   { id: "tts-1", label: "표준 (tts-1)" },
   { id: "tts-1-hd", label: "고품질 (tts-1-hd)" },
@@ -123,16 +134,17 @@ export default function TtsClient() {
         {/* 음성 선택 */}
         <div className="mb-4">
           <label className="mb-1.5 block text-sm font-medium text-zinc-700">음성</label>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {VOICES.map((v) => (
               <button
-                key={v}
-                onClick={() => setVoice(v)}
+                key={v.id}
+                onClick={() => setVoice(v.id)}
                 className={clsx(
-                  "rounded-xl border px-3 py-1.5 text-sm font-medium capitalize transition-colors",
-                  voice === v ? "border-blue-600 bg-blue-50 text-blue-700" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-100",
+                  "rounded-xl border px-3 py-2 text-left transition-colors",
+                  voice === v.id ? "border-blue-600 bg-blue-50" : "border-zinc-200 bg-white hover:bg-zinc-100",
                 )}>
-                {v}
+                <div className={clsx("text-sm font-medium", voice === v.id ? "text-blue-700" : "text-zinc-700")}>{v.label}</div>
+                <div className={clsx("text-xs", voice === v.id ? "text-blue-500" : "text-zinc-400")}>{v.desc}</div>
               </button>
             ))}
           </div>
