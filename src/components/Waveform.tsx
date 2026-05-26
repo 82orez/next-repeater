@@ -937,7 +937,21 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
               title="축소 (Ctrl/⌘ + −)">
               −
             </button>
-            <span className="min-w-[44px] text-center text-[11px] tabular-nums text-zinc-600">{zoomPps}</span>
+
+            <input
+              type="range"
+              min={20}
+              max={800}
+              step={10}
+              value={zoomPps}
+              onChange={(e) => setZoomPps(Number(e.target.value))}
+              disabled={isLoadingWave}
+              className="ml-1 hidden h-1 w-20 sm:block"
+              title={`줌: ${zoomPps} pps`}
+            />
+
+            <span className="hidden min-w-11 text-center text-[11px] text-zinc-600 tabular-nums">{zoomPps}</span>
+
             <button
               onClick={() => setZoomPps(Math.min(800, zoomPps + 20))}
               disabled={isLoadingWave}
@@ -950,19 +964,8 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
               disabled={isLoadingWave}
               className="ml-1 rounded-lg border border-zinc-200 bg-white px-1.5 py-0.5 text-[11px] text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
               title="초기화 (Ctrl/⌘ + 0)">
-              리셋
+              Reset
             </button>
-            <input
-              type="range"
-              min={20}
-              max={800}
-              step={10}
-              value={zoomPps}
-              onChange={(e) => setZoomPps(Number(e.target.value))}
-              disabled={isLoadingWave}
-              className="ml-1 hidden h-1 w-20 sm:block"
-              title={`줌: ${zoomPps} pps`}
-            />
           </div>
         </div>
         <div ref={minimapRef} className="w-full" />
