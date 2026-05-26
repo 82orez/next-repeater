@@ -932,7 +932,7 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
           <div className="flex items-center gap-1">
             <button
               onClick={() => setZoomPps(Math.max(20, zoomPps - 20))}
-              disabled={isLoadingWave}
+              disabled={!mediaUrl || isLoadingWave}
               className="rounded-lg border border-zinc-200 bg-white px-1.5 py-0.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40"
               title="축소 (Ctrl/⌘ + −)">
               −
@@ -945,7 +945,7 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
               step={10}
               value={zoomPps}
               onChange={(e) => setZoomPps(Number(e.target.value))}
-              disabled={isLoadingWave}
+              disabled={!mediaUrl || isLoadingWave}
               className="ml-1 hidden h-1 w-20 sm:block"
               title={`줌: ${zoomPps} pps`}
             />
@@ -954,14 +954,14 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
 
             <button
               onClick={() => setZoomPps(Math.min(800, zoomPps + 20))}
-              disabled={isLoadingWave}
+              disabled={!mediaUrl || isLoadingWave}
               className="rounded-lg border border-zinc-200 bg-white px-1.5 py-0.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40"
               title="확대 (Ctrl/⌘ + +)">
               +
             </button>
             <button
               onClick={() => setZoomPps(80)}
-              disabled={isLoadingWave}
+              disabled={!mediaUrl || isLoadingWave}
               className="ml-1 rounded-lg border border-zinc-200 bg-white px-1.5 py-0.5 text-[11px] text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
               title="초기화 (Ctrl/⌘ + 0)">
               Reset
