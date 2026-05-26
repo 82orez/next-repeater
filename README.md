@@ -17,7 +17,7 @@
 
 - OpenAI TTS API를 이용한 텍스트 → 음성 변환
 - 모델 선택 (tts-1 / tts-1-hd)
-- 10종 음성 선택 (각 음성별 특징 설명 제공)
+- 10종 음성 선택 (성별·억양 태그 및 톤 설명 제공)
 - 출력 형식 (MP3, Opus, AAC, FLAC, WAV, PCM) 및 속도 조절 (0.25x ~ 4.0x)
 - 브라우저 미리듣기 및 다운로드
 - 오작동 방지를 위한 생성 확인창
@@ -55,7 +55,7 @@ npm run start
 
 ## 기술 스택
 
-- [Next.js 16](https://nextjs.org) (App Router, Turbopack)
+- [Next.js 16](https://nextjs.org) (App Router)
 - [React 19](https://react.dev)
 - [Tailwind CSS v4](https://tailwindcss.com)
 - [Zustand](https://github.com/pmndrs/zustand) (상태 관리)

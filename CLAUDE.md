@@ -4,8 +4,8 @@
 
 ## 명령어
 
-- `npm run dev` — Turbopack 기반 Next.js 개발 서버 실행 (http://localhost:3000)
-- `npm run build` — 프로덕션 빌드 (Turbopack 사용)
+- `npm run dev` — Next.js 개발 서버 실행 (http://localhost:3000)
+- `npm run build` — 프로덕션 빌드
 - `npm run start` — 빌드된 앱 실행
 - `npx tsc --noEmit` — TypeScript 타입 검사 (이 저장소의 `strict: false`, `noImplicitAny: false` 설정을 따름)
 
@@ -42,7 +42,7 @@ Next.js 16 App Router 기반 앱으로, 두 개의 페이지가 있습니다:
 
 - **파일 로딩**은 `URL.createObjectURL`을 사용하며 변경/언마운트 시 명시적으로 해제됩니다(`Player.tsx`의 `objectUrlRef`). 파일 입력 경로를 수정할 때 blob 누수를 방지하기 위해 이 라이프사이클을 유지하세요.
 
-- **TTS 페이지**(`TtsClient.tsx`)는 Player와 독립적입니다. Zustand 스토어를 사용하지 않고 React `useState`로 로컬 상태만 관리합니다. API 라우트(`src/app/api/tts/route.ts`)가 OpenAI TTS API를 프록시하며, API 키는 `.env.local`의 `OPENAI_API_KEY`에 저장합니다. 생성된 오디오의 Object URL도 동일한 패턴으로 언마운트 시 해제합니다. 음성 생성 버튼은 `window.confirm`으로 실수 방지 확인창을 거칩니다. 음성 옵션(`VOICES`)은 `{ id, label, desc }` 객체 배열로 각 음성의 특징 설명을 포함합니다.
+- **TTS 페이지**(`TtsClient.tsx`)는 Player와 독립적입니다. Zustand 스토어를 사용하지 않고 React `useState`로 로컬 상태만 관리합니다. API 라우트(`src/app/api/tts/route.ts`)가 OpenAI TTS API를 프록시하며, API 키는 `.env.local`의 `OPENAI_API_KEY`에 저장합니다. 생성된 오디오의 Object URL도 동일한 패턴으로 언마운트 시 해제합니다. 음성 생성 버튼은 `window.confirm`으로 실수 방지 확인창을 거칩니다. 음성 옵션(`VOICES`)은 `{ id, label, gender, accent, desc }` 객체 배열로 각 음성의 성별(남성/여성/중성), 억양(미국식/영국식), 톤 설명을 포함합니다.
 
 ## 컨벤션
 
