@@ -34,7 +34,7 @@ Next.js 16 App Router 기반 앱으로, 두 개의 페이지가 있습니다:
   - 좌클릭 = 시크 (WaveSurfer의 `dragToSeek`).
   - 우클릭 드래그 = 새 A–B 리전 생성 (`RB_TMP_ID`를 이용한 커스텀 포인터 핸들러, `setLoopRange`로 확정).
   - ESC = 루프 리셋.
-  - Ctrl/⌘ + 휠 = 줌 (8% 단위, `setZoomPps`).
+  - Ctrl/⌘ + 휠 = 줌 (8% 단위, `setZoomPps`). 줌 UI 컨트롤(±/리셋 버튼, 슬라이더)은 Overview/Minimap 헤더에 인라인으로 배치되어 있습니다.
   - 터치 기기(`(hover: none), (pointer: coarse)`)에서는 리전 드래그/리사이즈를 비활성화합니다.
   - 리전 시각은 0.01초 단위로 스냅(`SNAP_SEC`)되며, `snapApplyingRef`가 스냅 보정이 재귀적으로 `region-updated`를 발생시키는 것을 막습니다.
 
