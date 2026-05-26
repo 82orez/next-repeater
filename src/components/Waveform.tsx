@@ -101,6 +101,9 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
   const playbackRate = usePlayerStore((s) => s.playbackRate);
   const volume = usePlayerStore((s) => s.volume);
 
+  const zoomPps = usePlayerStore((s) => s.zoomPps);
+  const setZoomPps = usePlayerStore((s) => s.setZoomPps);
+
   const loopEnabled = usePlayerStore((s) => s.loopEnabled);
   const loopA = usePlayerStore((s) => s.loopA);
   const loopB = usePlayerStore((s) => s.loopB);
@@ -922,11 +925,45 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
         </div>
       )}
 
-      {/* Overview / Minimap */}
+      {/* Overview / Minimap + Zoom */}
       <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
-        <div className="mb-1 hidden items-center justify-between md:flex">
+        <div className="mb-1 flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700">Overview</div>
-          <div className="text-[11px] text-zinc-500">현재 뷰포트 표시 / 클릭으로 탐색</div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setZoomPps(Math.max(20, zoomPps - 20))}
+              disabled={isLoadingWave}
+              className="rounded-lg border border-zinc-200 bg-white px-1.5 py-0.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40"
+              title="축소 (Ctrl/⌘ + −)">
+              −
+            </button>
+            <span className="min-w-[44px] text-center text-[11px] tabular-nums text-zinc-600">{zoomPps}</span>
+            <button
+              onClick={() => setZoomPps(Math.min(800, zoomPps + 20))}
+              disabled={isLoadingWave}
+              className="rounded-lg border border-zinc-200 bg-white px-1.5 py-0.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40"
+              title="확대 (Ctrl/⌘ + +)">
+              +
+            </button>
+            <button
+              onClick={() => setZoomPps(80)}
+              disabled={isLoadingWave}
+              className="ml-1 rounded-lg border border-zinc-200 bg-white px-1.5 py-0.5 text-[11px] text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+              title="초기화 (Ctrl/⌘ + 0)">
+              리셋
+            </button>
+            <input
+              type="range"
+              min={20}
+              max={800}
+              step={10}
+              value={zoomPps}
+              onChange={(e) => setZoomPps(Number(e.target.value))}
+              disabled={isLoadingWave}
+              className="ml-1 hidden h-1 w-20 sm:block"
+              title={`줌: ${zoomPps} pps`}
+            />
+          </div>
         </div>
         <div ref={minimapRef} className="w-full" />
       </div>

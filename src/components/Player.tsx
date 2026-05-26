@@ -333,7 +333,7 @@ export default function Player() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Repeat Player</h1>
-            <p className="mt-2 text-sm text-zinc-600">Zoom + Ctrl/⌘+휠 줌으로 긴 오디오도 정밀하게 A–B 구간을 설정할 수 있어요.</p>
+            <p className="mt-2 text-sm text-zinc-600">Ctrl/⌘+휠 줌으로 긴 오디오도 정밀하게 A–B 구간을 설정할 수 있어요.</p>
           </div>
           <Link
             href="/tts"
@@ -375,59 +375,6 @@ export default function Player() {
                 {showVideo ? "비디오 숨기기" : "비디오 보기"}
               </button>
             ) : null}
-          </div>
-        </div>
-
-        {/* ✅ Zoom */}
-        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-zinc-900">Wave Zoom</div>
-              <div className="mt-1 text-xs text-zinc-500">
-                <b>Ctrl/⌘ + 휠</b>로도 줌이 됩니다. (⌘/Ctrl +/−/0 단축키 지원)
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setZoomPps(zoomPps - 20)}
-                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50"
-                disabled={!ws}>
-                −
-              </button>
-
-              <div className="min-w-[80px] text-center text-sm font-medium text-zinc-900">{zoomPps} pps</div>
-
-              <button
-                onClick={() => setZoomPps(zoomPps + 20)}
-                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50"
-                disabled={!ws}>
-                +
-              </button>
-
-              <button
-                onClick={() => setZoomPps(80)}
-                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
-                disabled={!ws}
-                title="Ctrl/⌘ + 0">
-                Reset
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center gap-3">
-            <span className="w-10 text-xs text-zinc-500">20</span>
-            <input
-              type="range"
-              min={20}
-              max={800}
-              step={10}
-              value={zoomPps}
-              onChange={(e) => setZoomPps(Number(e.target.value))}
-              className="w-full"
-              disabled={!ws}
-            />
-            <span className="w-10 text-right text-xs text-zinc-500">800</span>
           </div>
         </div>
 
