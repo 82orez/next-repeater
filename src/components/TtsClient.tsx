@@ -6,16 +6,16 @@ import clsx from "clsx";
 import { ArrowLeft, Download, Volume2 } from "lucide-react";
 
 const VOICES = [
-  { id: "alloy", label: "Alloy", desc: "중성적이고 균형 잡힌 톤" },
-  { id: "ash", label: "Ash", desc: "부드럽고 차분한 남성 톤" },
-  { id: "ballad", label: "Ballad", desc: "감성적이고 표현력 있는 톤" },
-  { id: "coral", label: "Coral", desc: "따뜻하고 친근한 여성 톤" },
-  { id: "echo", label: "Echo", desc: "명확하고 또렷한 남성 톤" },
-  { id: "fable", label: "Fable", desc: "이야기체의 부드러운 톤" },
-  { id: "onyx", label: "Onyx", desc: "깊고 무게감 있는 남성 톤" },
-  { id: "nova", label: "Nova", desc: "밝고 활기찬 여성 톤" },
-  { id: "sage", label: "Sage", desc: "차분하고 신뢰감 있는 톤" },
-  { id: "shimmer", label: "Shimmer", desc: "맑고 경쾌한 여성 톤" },
+  { id: "alloy", label: "Alloy", gender: "중성", accent: "미국식", desc: "중성적이고 균형 잡힌 톤" },
+  { id: "ash", label: "Ash", gender: "남성", accent: "미국식", desc: "부드럽고 차분한 톤" },
+  { id: "ballad", label: "Ballad", gender: "남성", accent: "미국식", desc: "감성적이고 표현력 있는 톤" },
+  { id: "coral", label: "Coral", gender: "여성", accent: "미국식", desc: "따뜻하고 친근한 톤" },
+  { id: "echo", label: "Echo", gender: "남성", accent: "미국식", desc: "명확하고 또렷한 톤" },
+  { id: "fable", label: "Fable", gender: "남성", accent: "영국식", desc: "이야기체의 부드러운 톤" },
+  { id: "onyx", label: "Onyx", gender: "남성", accent: "미국식", desc: "깊고 무게감 있는 톤" },
+  { id: "nova", label: "Nova", gender: "여성", accent: "미국식", desc: "밝고 활기찬 톤" },
+  { id: "sage", label: "Sage", gender: "여성", accent: "미국식", desc: "차분하고 신뢰감 있는 톤" },
+  { id: "shimmer", label: "Shimmer", gender: "여성", accent: "미국식", desc: "맑고 경쾌한 톤" },
 ] as const;
 const MODELS = [
   { id: "tts-1", label: "표준 (tts-1)" },
@@ -143,7 +143,12 @@ export default function TtsClient() {
                   "rounded-xl border px-3 py-2 text-left transition-colors",
                   voice === v.id ? "border-blue-600 bg-blue-50" : "border-zinc-200 bg-white hover:bg-zinc-100",
                 )}>
-                <div className={clsx("text-sm font-medium", voice === v.id ? "text-blue-700" : "text-zinc-700")}>{v.label}</div>
+                <div className={clsx("flex items-center gap-1.5 text-sm font-medium", voice === v.id ? "text-blue-700" : "text-zinc-700")}>
+                  {v.label}
+                  <span className={clsx("whitespace-nowrap text-[10px] font-normal", voice === v.id ? "text-blue-400" : "text-zinc-400")}>
+                    {v.gender} · {v.accent}
+                  </span>
+                </div>
                 <div className={clsx("text-xs", voice === v.id ? "text-blue-500" : "text-zinc-400")}>{v.desc}</div>
               </button>
             ))}
