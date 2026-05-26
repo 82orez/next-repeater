@@ -143,13 +143,24 @@ export default function TtsClient() {
                   "rounded-xl border px-3 py-2 text-left transition-colors",
                   voice === v.id ? "border-blue-600 bg-blue-50" : "border-zinc-200 bg-white hover:bg-zinc-100",
                 )}>
-                <div className={clsx("flex items-center gap-1.5 text-sm font-medium", voice === v.id ? "text-blue-700" : "text-zinc-700")}>
-                  {v.label}
-                  <span className={clsx("whitespace-nowrap text-[10px] font-normal", voice === v.id ? "text-blue-400" : "text-zinc-400")}>
-                    {v.gender} · {v.accent}
+                <div className={clsx("text-sm font-medium", voice === v.id ? "text-blue-700" : "text-zinc-700")}>{v.label}</div>
+                <div className="mt-0.5 flex gap-1">
+                  <span
+                    className={clsx(
+                      "rounded px-1 py-0.5 text-[10px] font-medium",
+                      v.gender === "남성" ? "bg-blue-100 text-blue-700" : v.gender === "여성" ? "bg-rose-100 text-rose-700" : "bg-zinc-100 text-zinc-600",
+                    )}>
+                    {v.gender}
+                  </span>
+                  <span
+                    className={clsx(
+                      "rounded px-1 py-0.5 text-[10px] font-medium",
+                      v.accent === "영국식" ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700",
+                    )}>
+                    {v.accent}
                   </span>
                 </div>
-                <div className={clsx("text-xs", voice === v.id ? "text-blue-500" : "text-zinc-400")}>{v.desc}</div>
+                <div className={clsx("mt-0.5 text-xs", voice === v.id ? "text-blue-500" : "text-zinc-400")}>{v.desc}</div>
               </button>
             ))}
           </div>
