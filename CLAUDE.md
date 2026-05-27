@@ -22,12 +22,12 @@ Next.js 16 App Router 기반 앱으로, 두 개의 페이지가 있습니다:
 
 - **하나의 `<video>` 엘리먼트가 오디오와 비디오 재생을 모두 담당합니다.** `MediaView.tsx`는 단일 `<video>`를 렌더링합니다 (미디어가 오디오이거나 사용자가 비디오를 숨긴 경우에는 hidden 처리). `Player.tsx`는 해당 ref를 `Waveform.tsx`로 전달하고, `Waveform.tsx`는 `media: mediaRef.current`로 WaveSurfer에 넘깁니다. 이는 iOS/Safari 호환성을 위한 의도된 구조이므로 — `<audio>`/`<video>`를 별도 엘리먼트로 분리하지 마세요.
 
-- **상태는 하나의 Zustand 스토어**(`src/store/playerStore.ts`)에 집중되어 있으며, `persist` 미들웨어로 `localStorage`의 `repeat-player-v3` 키에 저장됩니다. `partialize`는 사용자 환경설정(rate/volume/zoom/preRoll/fade/autoPauseMs/repeatTarget/showVideo)과 `bookmarks`, `recent`만 저장합니다. 일시적 상태(`ws`, `isPlaying`, `loopA`, `loopB`, `currentTime` 등)는 의도적으로 저장하지 않습니다. **스토어 구조에 호환되지 않는 변경을 가할 때는 `name` 키를 올리거나** 마이그레이션을 작성해야 합니다.
+- **상태는 하나의 Zustand 스토어**(`src/store/playerStore.ts`)에 집중되어 있으며, `persist` 미들웨어로 `localStorage`의 `repeat-player-v3` 키에 저장됩니다. `partialize`는 사용자 환경설정(rate/volume/zoom/repeatTarget/showVideo)과 `bookmarks`, `recent`만 저장합니다. 일시적 상태(`ws`, `isPlaying`, `loopA`, `loopB`, `currentTime` 등)는 의도적으로 저장하지 않습니다. **스토어 구조에 호환되지 않는 변경을 가할 때는 `name` 키를 올리거나** 마이그레이션을 작성해야 합니다.
 
 - **WaveSurfer는 `Waveform.tsx`가 소유**하며 `setWs`를 통해 스토어에 게시됩니다. 다른 컴포넌트는 스토어를 거쳐 트랜스포트 함수(`play`, `pause`, `setTime`, `seekBy`, `setPlaybackRate`, `setVolume`)를 호출하고, 스토어가 이를 `ws`로 전달합니다. `Waveform.tsx` 외부에서 WaveSurfer ref를 보유하지 마세요.
 
 - **A–B 루프에는 `loopEnabled`에 따른 두 가지 모드**가 있습니다:
-  - 루프 ON: A→B를 반복하며 `repeatTarget`, `autoPauseMs`, `preRollSec`, `fadeMs`를 따릅니다. 루프 재시작은 시크 경합을 피하기 위해 `setTime` + `play`가 아니라 `play(start)`를 사용합니다. `loopGuardRef`와 `loopPendingRef`는 `repeatCount`의 이중 증가를 방지합니다.
+  - 루프 ON: A→B를 반복하며 `repeatTarget`을 따릅니다. 루프 재시작은 시크 경합을 피하기 위해 `setTime` + `play`가 아니라 `play(start)`를 사용합니다. `loopGuardRef`와 `loopPendingRef`는 `repeatCount`의 이중 증가를 방지합니다.
   - 루프 OFF 상태에서 A/B가 설정된 경우: "one-shot" 모드. `timeupdate`가 B에서 정지하고 커서를 A로 되감습니다. 재생 시작 시점이 남은 A–B 구간 밖이라면 `play`는 A로 점프합니다.
 
 - **리전 상호작용** (`Waveform.tsx`):
@@ -49,6 +49,6 @@ Next.js 16 App Router 기반 앱으로, 두 개의 페이지가 있습니다:
 - 경로 별칭 `@/*` → `./src/*` (`tsconfig.json`).
 - `tsconfig.json`은 의도적으로 `strict: false`와 `noImplicitAny: false`를 유지합니다 — 문의 없이 강화하지 마세요.
 - Prettier(`.prettierrc`): 큰따옴표, `tabWidth: 2`, `printWidth: 150`, `trailingComma: "all"`, `endOfLine: "crlf"`, 클래스 정렬용 `prettier-plugin-tailwindcss` 사용.
-- Tailwind v4는 `@tailwindcss/postcss`를 통해 사용하며, 유일한 CSS 파일은 `src/app/globals.css`이고 내용은 `@import "tailwindcss";` 한 줄뿐입니다.
+- Tailwind v4는 `@tailwindcss/postcss`를 통해 사용하며, CSS 파일은 `src/app/globals.css`이고 `@import "tailwindcss";`와 range 슬라이더 커스텀 스타일을 포함합니다.
 - 모든 인터랙티브 컴포넌트는 `"use client"`이며, 스토어 파일도 `localStorage`를 사용하므로 마찬가지입니다.
 - UI 문구와 인라인 주석은 한국어로 작성되어 있습니다 — 해당 파일들의 사용자 노출 문자열을 수정할 때는 기존 언어에 맞추세요.
