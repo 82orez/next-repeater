@@ -434,7 +434,7 @@ export default function Player() {
               }}
               disabled={!canLoop}
               className={clsx(
-                "flex h-[38px] w-12 items-center justify-center gap-2 rounded-2xl px-1 py-1 text-sm font-medium shadow-sm",
+                "inline-flex items-center justify-center rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
                 canLoop
                   ? loopEnabled
                     ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -442,7 +442,7 @@ export default function Player() {
                   : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
               )}
               title="반복 토글 (R)">
-              {canLoop ? loopEnabled ? <BsRepeat size={20} /> : <BsRepeat1 size={24} /> : <TbRepeatOff size={22} />}
+              {canLoop ? loopEnabled ? <BsRepeat size={16} /> : <BsRepeat1 size={16} /> : <TbRepeatOff size={16} />}
             </button>
 
             {/* Reset loop */}

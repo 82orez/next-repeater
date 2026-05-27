@@ -946,7 +946,7 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
               value={zoomPps}
               onChange={(e) => setZoomPps(Number(e.target.value))}
               disabled={!mediaUrl || isLoadingWave}
-              className="ml-1 hidden h-1 w-20 sm:block"
+              className="ml-1 hidden w-20 sm:block"
               title={`줌: ${zoomPps} pps`}
             />
 
