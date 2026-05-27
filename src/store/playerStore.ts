@@ -53,12 +53,8 @@ type PlayerState = {
   loopA: number | null;
   loopB: number | null;
 
-  autoPauseMs: number;
   repeatTarget: number;
   repeatCount: number;
-
-  preRollSec: number;
-  fadeMs: number;
 
   bookmarks: Bookmark[];
   recent: RecentItem[];
@@ -80,13 +76,9 @@ type PlayerState = {
   setLoopB: (t: number | null) => void;
 
   setLoopEnabled: (v: boolean) => void;
-  setAutoPauseMs: (ms: number) => void;
   setRepeatTarget: (n: number) => void;
   incRepeatCount: () => void;
   resetRepeatCount: () => void;
-
-  setPreRollSec: (sec: number) => void;
-  setFadeMs: (ms: number) => void;
 
   addBookmark: (b: Bookmark) => void;
   updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
@@ -137,12 +129,8 @@ export const usePlayerStore = create<PlayerState>()(
       loopA: null,
       loopB: null,
 
-      autoPauseMs: 0,
       repeatTarget: 0,
       repeatCount: 0,
-
-      preRollSec: 0,
-      fadeMs: 0,
 
       bookmarks: [],
       recent: [],
@@ -186,13 +174,9 @@ export const usePlayerStore = create<PlayerState>()(
       setLoopB: (t) => set({ loopB: t }),
 
       setLoopEnabled: (v) => set({ loopEnabled: v }),
-      setAutoPauseMs: (ms) => set({ autoPauseMs: ms }),
       setRepeatTarget: (n) => set({ repeatTarget: n }),
       incRepeatCount: () => set({ repeatCount: get().repeatCount + 1 }),
       resetRepeatCount: () => set({ repeatCount: 0 }),
-
-      setPreRollSec: (sec) => set({ preRollSec: sec }),
-      setFadeMs: (ms) => set({ fadeMs: ms }),
 
       addBookmark: (b) => set({ bookmarks: [b, ...get().bookmarks] }),
       updateBookmark: (id, patch) => set({ bookmarks: get().bookmarks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }),
@@ -239,10 +223,7 @@ export const usePlayerStore = create<PlayerState>()(
         playbackRate: s.playbackRate,
         volume: s.volume,
         zoomPps: s.zoomPps,
-        autoPauseMs: s.autoPauseMs,
         repeatTarget: s.repeatTarget,
-        preRollSec: s.preRollSec,
-        fadeMs: s.fadeMs,
         bookmarks: s.bookmarks,
         recent: s.recent,
         showVideo: s.showVideo,

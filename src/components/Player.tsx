@@ -8,7 +8,6 @@ import {
   Play,
   Flag,
   Upload,
-  Timer,
   ChevronLeft,
   ChevronRight,
   Volume2,
@@ -55,14 +54,8 @@ export default function Player() {
   const loopEnabled = usePlayerStore((s) => s.loopEnabled);
   const loopA = usePlayerStore((s) => s.loopA);
   const loopB = usePlayerStore((s) => s.loopB);
-  const autoPauseMs = usePlayerStore((s) => s.autoPauseMs);
   const repeatTarget = usePlayerStore((s) => s.repeatTarget);
   const repeatCount = usePlayerStore((s) => s.repeatCount);
-
-  const preRollSec = usePlayerStore((s) => s.preRollSec);
-  const fadeMs = usePlayerStore((s) => s.fadeMs);
-  const setPreRollSec = usePlayerStore((s) => s.setPreRollSec);
-  const setFadeMs = usePlayerStore((s) => s.setFadeMs);
 
   const bookmarks = usePlayerStore((s) => s.bookmarks);
 
@@ -79,7 +72,6 @@ export default function Player() {
   const setLoopEnabled = usePlayerStore((s) => s.setLoopEnabled);
   const setLoopA = usePlayerStore((s) => s.setLoopA);
   const setLoopB = usePlayerStore((s) => s.setLoopB);
-  const setAutoPauseMs = usePlayerStore((s) => s.setAutoPauseMs);
   const setRepeatTarget = usePlayerStore((s) => s.setRepeatTarget);
   const resetRepeatCount = usePlayerStore((s) => s.resetRepeatCount);
 
@@ -553,64 +545,20 @@ export default function Player() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {/* Loop Options */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm lg:col-span-2">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="block">
-                <div className="flex items-center gap-2 text-xs font-medium text-zinc-600">
-                  <Timer className="h-4 w-4" /> Auto Pause (ms)
-                </div>
-                <input
-                  type="number"
-                  min={0}
-                  max={2000}
-                  value={autoPauseMs}
-                  onChange={(e) => setAutoPauseMs(clamp(Number(e.target.value || 0), 0, 2000))}
-                  className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                />
-              </label>
-
-              <label className="block">
-                <div className="text-xs font-medium text-zinc-600">Repeat Limit</div>
-                <input
-                  type="number"
-                  min={0}
-                  max={999}
-                  value={repeatTarget}
-                  onChange={(e) => setRepeatTarget(clamp(Number(e.target.value || 0), 0, 999))}
-                  className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                />
-              </label>
-
-              <label className="block">
-                <div className="text-xs font-medium text-zinc-600">Pre-roll (sec)</div>
-                <input
-                  type="number"
-                  min={0}
-                  max={2}
-                  step={0.05}
-                  value={preRollSec}
-                  onChange={(e) => setPreRollSec(Number(e.target.value || 0))}
-                  className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                />
-                <div className="mt-1 text-[11px] text-zinc-500">0.10~0.25 추천</div>
-              </label>
-
-              <label className="block">
-                <div className="text-xs font-medium text-zinc-600">Fade (ms)</div>
-                <input
-                  type="number"
-                  min={0}
-                  max={800}
-                  step={10}
-                  value={fadeMs}
-                  onChange={(e) => setFadeMs(Number(e.target.value || 0))}
-                  className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-                />
-                <div className="mt-1 text-[11px] text-zinc-500">80~180ms 추천</div>
-              </label>
-            </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {/* Repeat Limit */}
+          <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <label className="block">
+              <div className="text-xs font-medium text-zinc-600">Repeat Limit</div>
+              <input
+                type="number"
+                min={0}
+                max={999}
+                value={repeatTarget}
+                onChange={(e) => setRepeatTarget(clamp(Number(e.target.value || 0), 0, 999))}
+                className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              />
+            </label>
           </div>
 
           {/* Speed */}

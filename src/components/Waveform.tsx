@@ -36,9 +36,7 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
   const wsRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<ReturnType<typeof Regions.create> | null>(null);
 
-  const loopTimerRef = useRef<number | null>(null);
   const loopGuardRef = useRef(false);
-  const fadeRafRef = useRef<number | null>(null);
 
   // ✅ repeatCount가 +2 되는 문제 방지용: “루프 재시작이 완료될 때까지” guard 유지
   const loopPendingRef = useRef<{ b: number } | null>(null);
@@ -126,33 +124,6 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
     Object.values(regions.getRegions()).forEach((r: any) => r.remove());
   };
 
-  const cancelFade = () => {
-    if (fadeRafRef.current) {
-      cancelAnimationFrame(fadeRafRef.current);
-      fadeRafRef.current = null;
-    }
-  };
-
-  const rampVolume = (from: number, to: number, ms: number, done?: () => void) => {
-    cancelFade();
-    if (ms <= 0) {
-      wsRef.current?.setVolume(to);
-      done?.();
-      return;
-    }
-    const start = performance.now();
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / ms);
-      const v = from + (to - from) * t;
-      wsRef.current?.setVolume(v);
-      if (t < 1) fadeRafRef.current = requestAnimationFrame(step);
-      else {
-        fadeRafRef.current = null;
-        done?.();
-      }
-    };
-    fadeRafRef.current = requestAnimationFrame(step);
-  };
 
   // ✅ 스냅 유틸
   const snapTime = (t: number, dur: number) => {
@@ -462,47 +433,9 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
         loopPendingRef.current = { b };
         st.incRepeatCount();
 
-        const targetVol = st.volume;
-        const preRoll = Math.max(0, st.preRollSec);
-        const fadeMs = Math.max(0, st.fadeMs);
-        const pauseMs = Math.max(0, st.autoPauseMs);
-
-        const jumpStart = Math.max(0, a - preRoll);
-
-        const doJumpAndPlay = () => {
-          const ws2 = wsRef.current;
-          if (!ws2) return;
-
-          // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
-          if (fadeMs > 0) {
-            ws2.setVolume(0);
-            (ws2 as any).play?.(jumpStart);
-            rampVolume(0, targetVol, fadeMs);
-          } else {
-            ws2.setVolume(targetVol);
-            (ws2 as any).play?.(jumpStart);
-          }
-          // ✅ loopGuardRef 해제는 timeupdate에서 “B 이전 복귀 확인” 후 수행
-        };
-
-        const afterPause = () => {
-          if (pauseMs > 0) {
-            if (loopTimerRef.current) window.clearTimeout(loopTimerRef.current);
-            loopTimerRef.current = window.setTimeout(doJumpAndPlay, pauseMs);
-          } else {
-            doJumpAndPlay();
-          }
-        };
-
-        if (fadeMs > 0) {
-          rampVolume(targetVol, 0, fadeMs, () => {
-            ws.pause();
-            afterPause();
-          });
-        } else {
-          if (pauseMs > 0) ws.pause();
-          afterPause();
-        }
+        // ✅ 핵심: setTime + play() 대신 play(start) 사용 (seek 레이스 감소)
+        (ws as any).play?.(a);
+        // ✅ loopGuardRef 해제는 timeupdate에서 “B 이전 복귀 확인” 후 수행
       }
     });
 
@@ -735,12 +668,6 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
-      cancelFade();
-      if (loopTimerRef.current) {
-        window.clearTimeout(loopTimerRef.current);
-        loopTimerRef.current = null;
-      }
-
       wrapperEl.removeEventListener("contextmenu", onContextMenu);
       wrapperEl.removeEventListener("pointerdown", onPointerDown);
       wrapperEl.removeEventListener("pointermove", onPointerMove);
@@ -778,7 +705,6 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
     setCurrentTime(0);
 
     clearAllRegions();
-    cancelFade();
 
     if (mediaUrl) {
       setIsLoadingWave(true);
