@@ -13,7 +13,9 @@ Next.js 16 App Router. 페이지 2개:
 
 로직은 `src/components`, `src/store`에 있음. 파일에 걸쳐 알아둘 사항:
 
-- **단일 `<video>` 엘리먼트가 오디오+비디오 재생을 모두 담당.** `MediaView.tsx`가 하나의 `<video>`를 렌더(오디오이거나 비디오 숨김 시 hidden). `Player.tsx`가 그 ref를 `Waveform.tsx`로 넘기고, `Waveform.tsx`가 `media: mediaRef.current`로 WaveSurfer에 전달. iOS/Safari 호환용 의도된 구조 — `<audio>`/`<video>`로 분리하지 마세요.
+- **단일 `<video>` 엘리먼트가 오디오+비디오 재생을 모두 담당.** `MediaView.tsx`가 하나의 `<video>`를 렌더(오디오이거나 비디오 숨김 시 hidden). `Player.tsx`가 그 ref를 `Waveform.tsx`로 넘기고, `Waveform.tsx`가 `media: mediaRef.current`로 WaveSurfer에 전달. iOS/Safari 호환용 의도된 구조 — `<audio>`/`<video>`로 분리하지 마세요. 영상 화면 더블클릭 시 `onToggle`(=`playPause`)로 재생/일시정지 토글.
+
+- **구간 추출**(`src/lib/audioExport.ts`): A–B 구간 음원을 MP3/WAV로 다운로드. `mediaUrl`(blob) fetch→`decodeAudioData`→구간 슬라이스→인코딩. MP3는 `@breezystack/lamejs`(`extractRegionToMp3`, 비트레이트 인자), WAV는 순수 JS 인코더(`extractRegionToWav`). `Player.tsx`의 "구간 추출" 버튼+비트레이트 select(128/192/320k)로 호출, `canLoop`일 때만 활성.
 
 - **상태는 단일 Zustand 스토어**(`src/store/playerStore.ts`), `persist`로 `localStorage` 키 `repeat-player-v3`에 저장. `partialize`는 환경설정(rate/volume/zoom/repeatTarget/showVideo)+`bookmarks`+`recent`만 저장; 일시 상태(`ws`/`isPlaying`/`loopA`/`loopB`/`currentTime` 등)는 저장 안 함. **호환 깨지는 변경 시 `name` 키를 올리거나 마이그레이션 작성.**
 
