@@ -1,54 +1,43 @@
 # CLAUDE.md
 
-이 파일은 이 저장소의 코드를 다룰 때 Claude Code (claude.ai/code)가 참고해야 할 지침을 제공합니다.
-
 ## 명령어
-
-- `npm run dev` — Next.js 개발 서버 실행 (http://localhost:3000)
-- `npm run build` — 프로덕션 빌드
-- `npm run start` — 빌드된 앱 실행
-- `npx tsc --noEmit` — TypeScript 타입 검사 (이 저장소의 `strict: false`, `noImplicitAny: false` 설정을 따름)
-
-lint 스크립트와 test 스크립트는 존재하지 않습니다 — 임의로 만들지 마세요.
+- `npm run dev` — 개발 서버 (localhost:3000)
+- `npm run build` / `npm run start` — 프로덕션 빌드 / 실행
+- `npx tsc --noEmit` — 타입 검사 (`strict:false`, `noImplicitAny:false`)
+- lint/test 스크립트 없음 — 만들지 마세요.
 
 ## 아키텍처
+Next.js 16 App Router. 페이지 2개:
+- **`/`** → `<Player />` (`src/app/page.tsx`): 오디오/비디오 A–B 반복 재생기.
+- **`/tts`** → `<TtsClient />` (`src/app/tts/page.tsx`): OpenAI TTS로 텍스트→음성 변환·다운로드.
 
-Next.js 16 App Router 기반 앱으로, 두 개의 페이지가 있습니다:
+로직은 `src/components`, `src/store`에 있음. 파일에 걸쳐 알아둘 사항:
 
-- **`/`** — Repeat Player (`src/app/page.tsx` → `<Player />`). 오디오/비디오 A–B 반복 재생기.
-- **`/tts`** — 텍스트 음성 변환 (`src/app/tts/page.tsx` → `<TtsClient />`). OpenAI TTS API로 텍스트를 음성 파일로 변환·다운로드.
+- **단일 `<video>` 엘리먼트가 오디오+비디오 재생을 모두 담당.** `MediaView.tsx`가 하나의 `<video>`를 렌더(오디오이거나 비디오 숨김 시 hidden). `Player.tsx`가 그 ref를 `Waveform.tsx`로 넘기고, `Waveform.tsx`가 `media: mediaRef.current`로 WaveSurfer에 전달. iOS/Safari 호환용 의도된 구조 — `<audio>`/`<video>`로 분리하지 마세요.
 
-실제 로직은 모두 `src/components`와 `src/store`에 있습니다. 여러 파일에 걸쳐 있어 알아둘 가치가 있는 사항들:
+- **상태는 단일 Zustand 스토어**(`src/store/playerStore.ts`), `persist`로 `localStorage` 키 `repeat-player-v3`에 저장. `partialize`는 환경설정(rate/volume/zoom/repeatTarget/showVideo)+`bookmarks`+`recent`만 저장; 일시 상태(`ws`/`isPlaying`/`loopA`/`loopB`/`currentTime` 등)는 저장 안 함. **호환 깨지는 변경 시 `name` 키를 올리거나 마이그레이션 작성.**
 
-- **하나의 `<video>` 엘리먼트가 오디오와 비디오 재생을 모두 담당합니다.** `MediaView.tsx`는 단일 `<video>`를 렌더링합니다 (미디어가 오디오이거나 사용자가 비디오를 숨긴 경우에는 hidden 처리). `Player.tsx`는 해당 ref를 `Waveform.tsx`로 전달하고, `Waveform.tsx`는 `media: mediaRef.current`로 WaveSurfer에 넘깁니다. 이는 iOS/Safari 호환성을 위한 의도된 구조이므로 — `<audio>`/`<video>`를 별도 엘리먼트로 분리하지 마세요.
+- **WaveSurfer는 `Waveform.tsx`가 소유**, `setWs`로 스토어에 게시. 타 컴포넌트는 스토어 경유로 트랜스포트 함수(`play`/`pause`/`setTime`/`seekBy`/`setPlaybackRate`/`setVolume`) 호출→스토어가 `ws`로 전달. `Waveform.tsx` 밖에서 WaveSurfer ref 보유 금지.
 
-- **상태는 하나의 Zustand 스토어**(`src/store/playerStore.ts`)에 집중되어 있으며, `persist` 미들웨어로 `localStorage`의 `repeat-player-v3` 키에 저장됩니다. `partialize`는 사용자 환경설정(rate/volume/zoom/repeatTarget/showVideo)과 `bookmarks`, `recent`만 저장합니다. 일시적 상태(`ws`, `isPlaying`, `loopA`, `loopB`, `currentTime` 등)는 의도적으로 저장하지 않습니다. **스토어 구조에 호환되지 않는 변경을 가할 때는 `name` 키를 올리거나** 마이그레이션을 작성해야 합니다.
-
-- **WaveSurfer는 `Waveform.tsx`가 소유**하며 `setWs`를 통해 스토어에 게시됩니다. 다른 컴포넌트는 스토어를 거쳐 트랜스포트 함수(`play`, `pause`, `setTime`, `seekBy`, `setPlaybackRate`, `setVolume`)를 호출하고, 스토어가 이를 `ws`로 전달합니다. `Waveform.tsx` 외부에서 WaveSurfer ref를 보유하지 마세요.
-
-- **A–B 루프에는 `loopEnabled`에 따른 두 가지 모드**가 있습니다:
-  - 루프 ON: A→B를 반복하며 `repeatTarget`을 따릅니다. 루프 재시작은 시크 경합을 피하기 위해 `setTime` + `play`가 아니라 `play(start)`를 사용합니다. `loopGuardRef`와 `loopPendingRef`는 `repeatCount`의 이중 증가를 방지합니다.
-  - 루프 OFF 상태에서 A/B가 설정된 경우: "one-shot" 모드. `timeupdate`가 B에서 정지하고 커서를 A로 되감습니다. 재생 시작 시점이 남은 A–B 구간 밖이라면 `play`는 A로 점프합니다.
+- **A–B 루프 = `loopEnabled` 기준 2모드:**
+  - ON: A→B 반복, `repeatTarget` 따름. 재시작은 시크 경합 회피 위해 `play(start)` 사용(`setTime`+`play` 아님). `loopGuardRef`/`loopPendingRef`가 `repeatCount` 이중 증가 방지.
+  - OFF+A/B 설정: "one-shot". `timeupdate`가 B에서 정지 후 커서를 A로 되감음. 시작 시점이 A–B 밖이면 `play`가 A로 점프.
 
 - **리전 상호작용** (`Waveform.tsx`):
-  - 좌클릭 = 시크 (WaveSurfer의 `dragToSeek`).
-  - 우클릭 드래그 = 새 A–B 리전 생성 (`RB_TMP_ID`를 이용한 커스텀 포인터 핸들러, `setLoopRange`로 확정).
-  - ESC = 루프 리셋.
-  - Ctrl/⌘ + 휠 = 줌 (8% 단위, `setZoomPps`). 줌 UI 컨트롤(±/리셋 버튼, 슬라이더)은 Overview/Minimap 헤더에 인라인으로 배치되어 있습니다.
-  - 터치 기기(`(hover: none), (pointer: coarse)`)에서는 리전 드래그/리사이즈를 비활성화합니다.
-  - 리전 시각은 0.01초 단위로 스냅(`SNAP_SEC`)되며, `snapApplyingRef`가 스냅 보정이 재귀적으로 `region-updated`를 발생시키는 것을 막습니다.
+  - 좌클릭 = 시크(`dragToSeek`). 우클릭 드래그 = 새 A–B 리전 생성(`RB_TMP_ID` 커스텀 포인터 핸들러, `setLoopRange`로 확정). ESC = 루프 리셋.
+  - Ctrl/⌘+휠 = 줌(8% 단위, `setZoomPps`). 줌 UI(±/리셋/슬라이더)는 Overview/Minimap 헤더에 인라인.
+  - 터치 기기(`(hover:none),(pointer:coarse)`)는 리전 드래그/리사이즈 비활성.
+  - 리전 시각은 `SNAP_SEC`(0.01초) 스냅, `snapApplyingRef`가 스냅→`region-updated` 재귀 방지.
 
-- **북마크**는 POINT 또는 REGION 두 종류가 있습니다. REGION 북마크는 "구문(phrase)" 역할을 하며 `Player.tsx`의 이전/다음 구문 버튼을 동작시킵니다.
+- **북마크**는 POINT/REGION 2종. REGION은 "구문(phrase)"으로 `Player.tsx`의 이전/다음 구문 버튼 구동.
 
-- **파일 로딩**은 `URL.createObjectURL`을 사용하며 변경/언마운트 시 명시적으로 해제됩니다(`Player.tsx`의 `objectUrlRef`). 파일 입력 경로를 수정할 때 blob 누수를 방지하기 위해 이 라이프사이클을 유지하세요.
+- **파일 로딩**은 `URL.createObjectURL`, 변경/언마운트 시 명시적 해제(`Player.tsx`의 `objectUrlRef`). blob 누수 방지 위해 이 라이프사이클 유지.
 
-- **TTS 페이지**(`TtsClient.tsx`)는 Player와 독립적입니다. Zustand 스토어를 사용하지 않고 React `useState`로 로컬 상태만 관리합니다. API 라우트(`src/app/api/tts/route.ts`)가 OpenAI TTS API를 프록시하며, API 키는 `.env.local`의 `OPENAI_API_KEY`에 저장합니다. 생성된 오디오의 Object URL도 동일한 패턴으로 언마운트 시 해제합니다. 음성 생성 버튼은 `window.confirm`으로 실수 방지 확인창을 거칩니다. 음성 옵션(`VOICES`)은 `{ id, label, gender, accent, desc }` 객체 배열로 각 음성의 성별(남성/여성/중성), 억양(미국식/영국식), 톤 설명을 포함합니다.
+- **TTS**(`TtsClient.tsx`)는 Player와 독립, Zustand 없이 `useState`만 사용. API 라우트(`src/app/api/tts/route.ts`)가 OpenAI TTS 프록시, 키는 `.env.local`의 `OPENAI_API_KEY`. Object URL은 동일 패턴으로 언마운트 시 해제. 생성 버튼은 `window.confirm` 확인. `VOICES`는 `{id,label,gender,accent,desc}` 배열.
 
 ## 컨벤션
-
-- 경로 별칭 `@/*` → `./src/*` (`tsconfig.json`).
-- `tsconfig.json`은 의도적으로 `strict: false`와 `noImplicitAny: false`를 유지합니다 — 문의 없이 강화하지 마세요.
-- Prettier(`.prettierrc`): 큰따옴표, `tabWidth: 2`, `printWidth: 150`, `trailingComma: "all"`, `endOfLine: "crlf"`, 클래스 정렬용 `prettier-plugin-tailwindcss` 사용.
-- Tailwind v4는 `@tailwindcss/postcss`를 통해 사용하며, CSS 파일은 `src/app/globals.css`이고 `@import "tailwindcss";`와 range 슬라이더 커스텀 스타일을 포함합니다.
-- 모든 인터랙티브 컴포넌트는 `"use client"`이며, 스토어 파일도 `localStorage`를 사용하므로 마찬가지입니다.
-- UI 문구와 인라인 주석은 한국어로 작성되어 있습니다 — 해당 파일들의 사용자 노출 문자열을 수정할 때는 기존 언어에 맞추세요.
+- 별칭 `@/*`→`./src/*`. `strict:false`/`noImplicitAny:false` 유지 — 문의 없이 강화 금지.
+- Prettier: 큰따옴표, `tabWidth:2`, `printWidth:150`, `trailingComma:"all"`, `endOfLine:"crlf"`, `prettier-plugin-tailwindcss`.
+- Tailwind v4(`@tailwindcss/postcss`), CSS는 `src/app/globals.css`(`@import "tailwindcss";`+range 슬라이더 커스텀).
+- 인터랙티브 컴포넌트·스토어는 모두 `"use client"`.
+- UI 문구·주석은 한국어 — 사용자 노출 문자열 수정 시 기존 언어 유지.

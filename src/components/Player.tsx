@@ -1,7 +1,7 @@
 // src/components/Player.tsx
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import {
   Pause,
@@ -15,6 +15,7 @@ import {
   RotateCcw,
   ArrowLeftToLine,
   ArrowRightFromLine,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import Waveform from "@/components/Waveform";
@@ -23,6 +24,7 @@ import BookmarkPanel from "@/components/BookmarkPanel";
 import Recorder from "@/components/Recorder";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
+import { extractRegionToWav } from "@/lib/audioExport";
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { TbRepeatOff } from "react-icons/tb";
 
@@ -156,6 +158,23 @@ export default function Player() {
   };
 
   const controlsDisabled = !mediaUrl || !ws;
+
+  // ✅ 선택 구간(A–B)을 WAV로 추출
+  const [extracting, setExtracting] = useState(false);
+  const extractRegion = useCallback(async () => {
+    if (!mediaUrl || !canLoop || extracting) return;
+    const a = Math.min(loopA!, loopB!);
+    const b = Math.max(loopA!, loopB!);
+    setExtracting(true);
+    try {
+      await extractRegionToWav(mediaUrl, a, b, fileName);
+    } catch (e) {
+      console.error(e);
+      alert("구간 추출에 실패했습니다.");
+    } finally {
+      setExtracting(false);
+    }
+  }, [mediaUrl, canLoop, extracting, loopA, loopB, fileName]);
 
   // ✅ A(-3s) 버튼 동작:
   // 1) A/B 미설정이면: -3초 seek
@@ -372,7 +391,7 @@ export default function Player() {
 
         {/* Waveform */}
         <div className="mt-5">
-          <MediaView ref={mediaRef} mediaUrl={mediaUrl} mediaKind={mediaKind} showVideo={showVideo} />
+          <MediaView ref={mediaRef} mediaUrl={mediaUrl} mediaKind={mediaKind} showVideo={showVideo} onToggle={playPause} />
           <Waveform mediaRef={mediaRef} />
         </div>
 
@@ -450,6 +469,16 @@ export default function Player() {
               title="구간 초기화 (Esc)">
               <RotateCcw className="h-4 w-4" />
               <span className="inline-flex items-center gap-2">Reset</span>
+            </button>
+
+            {/* ✅ 선택 구간 WAV 추출 */}
+            <button
+              onClick={extractRegion}
+              disabled={!canLoop || controlsDisabled || extracting}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="선택한 A/B 구간을 WAV 파일로 저장">
+              <Download className="h-4 w-4" />
+              {extracting ? "추출 중…" : "구간 추출(WAV)"}
             </button>
 
             {/* ✅ A부터 재생 (구간 유지) / (A/B 없으면 -3초) */}
