@@ -25,6 +25,7 @@ import Recorder from "@/components/Recorder";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
 import { extractRegionToMp3 } from "@/lib/audioExport";
+import { transcodeToPlayableMp4 } from "@/lib/videoTranscode";
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { TbRepeatOff } from "react-icons/tb";
 
@@ -176,6 +177,42 @@ export default function Player() {
       setExtracting(false);
     }
   }, [mediaUrl, canLoop, extracting, loopA, loopB, fileName, mp3Kbps]);
+
+  // ✅ 재생 실패 시: ffmpeg.wasm으로 크롬 호환 MP4(H.264+AAC) 변환 후 소스 교체
+  const [converting, setConverting] = useState(false);
+  const [convertProgress, setConvertProgress] = useState(0);
+  const convertMedia = useCallback(async () => {
+    if (!mediaUrl || converting) return;
+    setConverting(true);
+    setConvertProgress(0);
+    try {
+      const { url, fileName: newName } = await transcodeToPlayableMp4(mediaUrl, fileName, (r) => setConvertProgress(r));
+
+      // 재생 불가였던 이전 원본 ObjectURL 정리 후 교체
+      if (objectUrlRef.current && objectUrlRef.current !== url) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+      objectUrlRef.current = url;
+
+      setSource({ mediaUrl: url, mediaKind: "video", fileName: newName });
+      upsertRecent({ fileName: newName, mediaUrl: url, mediaKind: "video", lastTime: 0 });
+
+      // iOS/Safari metadata 로딩 트리거(기존 패턴 유지)
+      if (mediaRef.current) {
+        try {
+          mediaRef.current.src = url;
+          mediaRef.current.load();
+        } catch {
+          // ignore
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      alert("변환에 실패했습니다.");
+    } finally {
+      setConverting(false);
+    }
+  }, [mediaUrl, converting, fileName, setSource, upsertRecent]);
 
   // ✅ A(-3s) 버튼 동작:
   // 1) A/B 미설정이면: -3초 seek
@@ -392,7 +429,16 @@ export default function Player() {
 
         {/* Waveform */}
         <div className="mt-5">
-          <MediaView ref={mediaRef} mediaUrl={mediaUrl} mediaKind={mediaKind} showVideo={showVideo} onToggle={playPause} />
+          <MediaView
+            ref={mediaRef}
+            mediaUrl={mediaUrl}
+            mediaKind={mediaKind}
+            showVideo={showVideo}
+            onToggle={playPause}
+            onRequestConvert={convertMedia}
+            converting={converting}
+            convertProgress={convertProgress}
+          />
           <Waveform mediaRef={mediaRef} />
         </div>
 

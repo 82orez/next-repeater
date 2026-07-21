@@ -1,7 +1,7 @@
 // src/components/Waveform.tsx
 "use client";
 
-import React, { useRef, useEffect, useMemo, useState } from "react";
+import React, { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import Minimap from "wavesurfer.js/dist/plugins/minimap.esm.js";
@@ -27,6 +27,19 @@ function fmtTimeCS(sec: number) {
   const ss = Math.floor((totalCs % (60 * 100)) / 100);
   const cs = totalCs % 100;
   return `${pad2(mm)}:${pad2(ss)}.${pad2(cs)}`;
+}
+
+// ✅ 로딩 에러를 사용자 친화적 한국어 안내로 변환
+// - NotReadableError(파일 읽기 실패)는 코덱이 아니라 iCloud 미다운로드/파일 이동/대용량이 원인
+function friendlyLoadError(e: any): string {
+  const name = typeof e === "object" && e ? String(e?.name ?? "") : "";
+  const raw = typeof e === "string" ? e : e?.message ? String(e.message) : "";
+  const lower = raw.toLowerCase();
+
+  if (name === "NotReadableError" || lower.includes("could not be read") || lower.includes("permission")) {
+    return "파일을 읽을 수 없습니다. ① iCloud/클라우드 동기화 폴더(예: 바탕화면)면 로컬로 완전히 내려받았는지 ② 파일이 이동·삭제·변경되지 않았는지 확인해 주세요. ③ 매우 큰 영상은 브라우저가 통째로 읽지 못할 수 있어요.";
+  }
+  return raw || "미디어 로딩 중 오류가 발생했어요.";
 }
 
 export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLVideoElement | null> }) {
@@ -58,6 +71,37 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const loadingStartRef = useRef<number | null>(null);
   const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
+
+  // ✅ 로딩 실패 공통 처리(load catch / ws.on("error") / retry에서 재사용)
+  const handleLoadFail = useCallback((e: any) => {
+    setLoadingError(friendlyLoadError(e));
+    setIsLoadingWave(false);
+    setLoadingPct(null);
+    setLoadingStage("idle");
+    loadingStartRef.current = null;
+    setLoadingElapsedSec(0);
+  }, []);
+
+  // ✅ 다시 시도: 같은 소스를 재로딩(iCloud 파일이 그사이 내려받아졌으면 성공 가능)
+  const retryLoad = useCallback(() => {
+    const ws = wsRef.current;
+    const mediaUrl = usePlayerStore.getState().mediaUrl;
+    if (!ws || !mediaUrl) return;
+
+    setLoadingError(null);
+    setIsLoadingWave(true);
+    setLoadingStage("loading");
+    setLoadingPct(null);
+    loadingStartRef.current = performance.now();
+    setLoadingElapsedSec(0);
+
+    try {
+      const ret: any = ws.load(mediaUrl);
+      if (ret && typeof ret.catch === "function") ret.catch(handleLoadFail);
+    } catch (e) {
+      handleLoadFail(e);
+    }
+  }, [handleLoadFail]);
 
   // ✅ 터치 기반 감지: (hover none) 또는 (pointer coarse)면 region drag/resize 비활성화
   const [isTouchLike, setIsTouchLike] = useState(false);
@@ -314,13 +358,9 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
     });
 
     ws.on("error", (e: any) => {
-      const msg = typeof e === "string" ? e : e?.message ? String(e.message) : "미디어 로딩 중 오류가 발생했어요.";
-      setLoadingError(msg);
-      setIsLoadingWave(false);
-      setLoadingPct(null);
-      setLoadingStage("idle");
-      loadingStartRef.current = null;
-      setLoadingElapsedSec(0);
+      // AbortError(소스 교체로 인한 중단)는 정상 흐름이므로 무시
+      if (e?.name === "AbortError") return;
+      handleLoadFail(e);
     });
 
     // ✅ Loop OFF + AB 존재일 때:
@@ -713,7 +753,18 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
       loadingStartRef.current = performance.now();
       setLoadingElapsedSec(0);
       setLoadingPct(null);
-      ws.load(mediaUrl);
+      // ✅ load()의 Promise 거부(NotReadableError 등)를 잡아 앱 크래시(런타임 오버레이) 방지
+      try {
+        const ret: any = ws.load(mediaUrl);
+        if (ret && typeof ret.catch === "function") {
+          ret.catch((e: any) => {
+            if (e?.name === "AbortError") return; // 소스 교체 중단은 무시
+            handleLoadFail(e);
+          });
+        }
+      } catch (e) {
+        handleLoadFail(e);
+      }
     } else {
       setIsLoadingWave(false);
       setLoadingPct(null);
@@ -847,7 +898,14 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
         <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           <div className="font-semibold">미디어 로딩 실패</div>
           <div className="mt-1 text-xs text-rose-700/90">{loadingError}</div>
-          <div className="mt-2 text-[11px] text-rose-700/80">팁: iOS Safari에서는 재생 버튼을 한 번 눌러야 로딩/분석이 시작될 수 있어요.</div>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              onClick={retryLoad}
+              className="rounded-lg border border-rose-300 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 shadow-sm hover:bg-rose-100">
+              다시 시도
+            </button>
+            <span className="text-[11px] text-rose-700/80">팁: iOS Safari에서는 재생 버튼을 한 번 눌러야 로딩/분석이 시작될 수 있어요.</span>
+          </div>
         </div>
       )}
 

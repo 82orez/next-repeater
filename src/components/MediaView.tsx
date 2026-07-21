@@ -2,7 +2,7 @@
 "use client";
 
 import React, { forwardRef, useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Wand2 } from "lucide-react";
 import type { MediaKind } from "@/store/playerStore";
 
 type Props = {
@@ -10,6 +10,9 @@ type Props = {
   mediaKind: MediaKind;
   showVideo: boolean;
   onToggle?: () => void; // 화면 더블클릭 시 재생/일시정지 토글
+  onRequestConvert?: () => void; // 호환 포맷으로 변환 요청
+  converting?: boolean; // 변환 진행 중
+  convertProgress?: number; // 0~1
 };
 
 // MediaError.code → 사용자 안내 문구
@@ -26,7 +29,10 @@ function errorMessage(code?: number): string {
   }
 }
 
-const MediaView = forwardRef<HTMLVideoElement, Props>(function MediaView({ mediaUrl, mediaKind, showVideo, onToggle }, ref) {
+const MediaView = forwardRef<HTMLVideoElement, Props>(function MediaView(
+  { mediaUrl, mediaKind, showVideo, onToggle, onRequestConvert, converting, convertProgress },
+  ref,
+) {
   // ✅ video 엘리먼트를 “단일 재생 소스”로 사용 (audio 파일도 video 엘리먼트로 재생 가능)
   // - audio 모드에서는 UI를 숨기고(파형/컨트롤만 노출)
   // - video 모드에서는 화면을 보여줌
@@ -48,6 +54,27 @@ const MediaView = forwardRef<HTMLVideoElement, Props>(function MediaView({ media
   };
 
   const box = "overflow-hidden rounded-3xl border shadow-sm";
+  const pct = Math.round(Math.max(0, Math.min(1, convertProgress ?? 0)) * 100);
+
+  // 변환 버튼 / 진행률 표시
+  const convertUI = onRequestConvert ? (
+    converting ? (
+      <div className="flex flex-col items-center gap-2">
+        <div className="text-xs font-medium text-white">호환 포맷으로 변환 중… {pct}%</div>
+        <div className="h-1.5 w-48 overflow-hidden rounded-full bg-white/20">
+          <div className="h-full bg-amber-400 transition-[width]" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="text-[11px] text-white/70">동영상 길이에 따라 다소 시간이 걸릴 수 있어요.</div>
+      </div>
+    ) : (
+      <button
+        onClick={onRequestConvert}
+        className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-600">
+        <Wand2 className="h-4 w-4" />
+        호환 포맷(MP4)으로 변환
+      </button>
+    )
+  ) : null;
 
   return (
     <>
@@ -64,20 +91,46 @@ const MediaView = forwardRef<HTMLVideoElement, Props>(function MediaView({ media
             onDoubleClick={onToggle}
             className="h-full w-full cursor-pointer select-none"
           />
-          {error ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 px-6 text-center">
-              <AlertTriangle className="h-6 w-6 text-amber-400" />
-              <div className="text-sm font-medium text-white">{error}</div>
+          {error || converting ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
+              {!converting ? (
+                <>
+                  <AlertTriangle className="h-6 w-6 text-amber-400" />
+                  <div className="text-sm font-medium text-white">{error}</div>
+                </>
+              ) : null}
+              {convertUI}
             </div>
           ) : null}
         </div>
       </div>
 
       {/* 화면이 숨겨진 상태(오디오로 분류되었거나 비디오 숨김)에서의 에러 안내 배너 */}
-      {error && !visible ? (
-        <div className={`flex items-start gap-2 border-amber-200 bg-amber-50 p-4 ${box}`}>
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-          <div className="text-sm font-medium text-amber-800">{error}</div>
+      {(error || converting) && !visible ? (
+        <div className={`flex flex-col gap-3 border-amber-200 bg-amber-50 p-4 ${box}`}>
+          {!converting ? (
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+              <div className="text-sm font-medium text-amber-800">{error}</div>
+            </div>
+          ) : null}
+          {onRequestConvert ? (
+            converting ? (
+              <div className="flex flex-col gap-2">
+                <div className="text-xs font-medium text-amber-800">호환 포맷으로 변환 중… {pct}%</div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-200">
+                  <div className="h-full bg-amber-500 transition-[width]" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={onRequestConvert}
+                className="inline-flex w-fit items-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-600">
+                <Wand2 className="h-4 w-4" />
+                호환 포맷(MP4)으로 변환
+              </button>
+            )
+          ) : null}
         </div>
       ) : null}
     </>
