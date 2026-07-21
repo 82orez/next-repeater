@@ -13,6 +13,7 @@ type Props = {
   onRequestConvert?: () => void; // 호환 포맷으로 변환 요청
   converting?: boolean; // 변환 진행 중
   convertProgress?: number; // 0~1
+  largeFile?: boolean; // 대용량(브라우저 변환 불가) → 변환 버튼 대신 로컬 안내
 };
 
 // MediaError.code → 사용자 안내 문구
@@ -30,7 +31,7 @@ function errorMessage(code?: number): string {
 }
 
 const MediaView = forwardRef<HTMLVideoElement, Props>(function MediaView(
-  { mediaUrl, mediaKind, showVideo, onToggle, onRequestConvert, converting, convertProgress },
+  { mediaUrl, mediaKind, showVideo, onToggle, onRequestConvert, converting, convertProgress, largeFile },
   ref,
 ) {
   // ✅ video 엘리먼트를 “단일 재생 소스”로 사용 (audio 파일도 video 엘리먼트로 재생 가능)
@@ -56,7 +57,7 @@ const MediaView = forwardRef<HTMLVideoElement, Props>(function MediaView(
   const box = "overflow-hidden rounded-3xl border shadow-sm";
   const pct = Math.round(Math.max(0, Math.min(1, convertProgress ?? 0)) * 100);
 
-  // 변환 버튼 / 진행률 표시
+  // 변환 버튼 / 진행률 표시 (대용량은 버튼 대신 로컬 안내)
   const convertUI = onRequestConvert ? (
     converting ? (
       <div className="flex flex-col items-center gap-2">
@@ -66,6 +67,8 @@ const MediaView = forwardRef<HTMLVideoElement, Props>(function MediaView(
         </div>
         <div className="text-[11px] text-white/70">동영상 길이에 따라 다소 시간이 걸릴 수 있어요.</div>
       </div>
+    ) : largeFile ? (
+      <div className="max-w-md text-xs text-white/80">이 파일은 커서 브라우저에서 변환할 수 없습니다.</div>
     ) : (
       <button
         onClick={onRequestConvert}
@@ -122,6 +125,8 @@ const MediaView = forwardRef<HTMLVideoElement, Props>(function MediaView(
                   <div className="h-full bg-amber-500 transition-[width]" style={{ width: `${pct}%` }} />
                 </div>
               </div>
+            ) : largeFile ? (
+              <div className="text-xs text-amber-800">이 파일은 커서 브라우저에서 변환할 수 없습니다.</div>
             ) : (
               <button
                 onClick={onRequestConvert}

@@ -26,6 +26,9 @@ import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
 import { extractRegionToMp3 } from "@/lib/audioExport";
 import { transcodeVideo, type TranscodeOptions } from "@/lib/videoTranscode";
+
+// 이 크기 초과 시 브라우저 변환(ffmpeg.wasm)은 메모리 한계로 불가 → 로컬 명령어로 유도
+const LARGE_BYTES = 700 * 1024 * 1024;
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { TbRepeatOff } from "react-icons/tb";
 
@@ -184,21 +187,14 @@ export default function Player() {
   const [convertProgress, setConvertProgress] = useState(0);
   const [mediaSize, setMediaSize] = useState<number | null>(null);
 
-  // 최적화 옵션 UI 상태
-  const [optRes, setOptRes] = useState<"orig" | "720" | "480">("720");
-  const [optQuality, setOptQuality] = useState<"high" | "normal" | "small">("normal");
+  const isLarge = mediaSize != null && mediaSize > LARGE_BYTES;
 
   const runTranscode = useCallback(
     async (opts: TranscodeOptions, download: boolean) => {
       if (!mediaUrl || converting) return;
 
-      // 대용량 사전 경고(브라우저 wasm 메모리 한계)
-      if (mediaSize && mediaSize > 700 * 1024 * 1024) {
-        const ok = window.confirm(
-          "파일이 큽니다. 브라우저 내 변환은 메모리 한계로 실패하거나 매우 느릴 수 있어요.\n대용량은 로컬 도구(예: ffmpeg/HandBrake)를 권장합니다.\n\n그래도 계속할까요?",
-        );
-        if (!ok) return;
-      }
+      // 대용량은 브라우저 변환 불가 → 로컬 명령어 사용 유도(다이얼로그 없이 차단)
+      if (isLarge) return;
 
       setConverting(true);
       setConvertProgress(0);
@@ -241,18 +237,11 @@ export default function Player() {
         setConverting(false);
       }
     },
-    [mediaUrl, converting, mediaSize, fileName, setSource, upsertRecent],
+    [mediaUrl, converting, isLarge, fileName, setSource, upsertRecent],
   );
 
   // 재생 실패 복구: 원본 해상도 유지, 기본 화질(다운로드 안 함)
   const convertMedia = useCallback(() => runTranscode({}, false), [runTranscode]);
-
-  // 최적화 실행: 선택한 해상도/화질로 변환 + 다운로드
-  const optimizeVideo = useCallback(() => {
-    const scaleHeight = optRes === "orig" ? null : Number(optRes);
-    const crf = optQuality === "high" ? 20 : optQuality === "small" ? 28 : 23;
-    return runTranscode({ scaleHeight, crf }, true);
-  }, [optRes, optQuality, runTranscode]);
 
   // ✅ A(-3s) 버튼 동작:
   // 1) A/B 미설정이면: -3초 seek
@@ -478,6 +467,7 @@ export default function Player() {
             onRequestConvert={convertMedia}
             converting={converting}
             convertProgress={convertProgress}
+            largeFile={isLarge}
           />
           <Waveform mediaRef={mediaRef} />
         </div>
@@ -674,58 +664,6 @@ export default function Player() {
             <span className="rounded-full bg-zinc-100 px-2 py-1 text-zinc-600">반복: {repeatCount}</span>
           </div>
         </div>
-
-        {/* ✅ 영상 최적화 (브라우저 내 재인코딩) */}
-        {mediaKind === "video" && mediaUrl ? (
-          <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="text-sm font-semibold text-zinc-900">영상 최적화</div>
-
-              <label className="flex items-center gap-1.5 text-xs text-zinc-600">
-                해상도
-                <select
-                  value={optRes}
-                  onChange={(e) => setOptRes(e.target.value as "orig" | "720" | "480")}
-                  disabled={converting}
-                  className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-800 outline-none hover:bg-zinc-50 disabled:opacity-60">
-                  <option value="orig">원본 유지</option>
-                  <option value="720">720p</option>
-                  <option value="480">480p</option>
-                </select>
-              </label>
-
-              <label className="flex items-center gap-1.5 text-xs text-zinc-600">
-                화질
-                <select
-                  value={optQuality}
-                  onChange={(e) => setOptQuality(e.target.value as "high" | "normal" | "small")}
-                  disabled={converting}
-                  className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-800 outline-none hover:bg-zinc-50 disabled:opacity-60">
-                  <option value="high">높음(용량 큼)</option>
-                  <option value="normal">보통</option>
-                  <option value="small">작게(용량 작음)</option>
-                </select>
-              </label>
-
-              <button
-                onClick={optimizeVideo}
-                disabled={converting}
-                className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60">
-                {converting ? `최적화 중… ${Math.round(convertProgress * 100)}%` : "최적화 + 다운로드"}
-              </button>
-
-              {converting ? (
-                <div className="h-1.5 w-40 overflow-hidden rounded-full bg-zinc-100">
-                  <div className="h-full bg-zinc-900 transition-[width]" style={{ width: `${Math.round(convertProgress * 100)}%` }} />
-                </div>
-              ) : null}
-            </div>
-            <p className="mt-2 text-[11px] text-zinc-500">
-              브라우저에서 H.264 MP4로 재인코딩합니다(코덱은 크롬 호환을 위해 H.264 고정). 결과는 자동 다운로드되며 현재 재생본도 교체됩니다. 대용량(수백 MB↑)·장시간
-              영상은 실패하거나 매우 느릴 수 있어요 — 그럴 땐 로컬 도구를 권장합니다.
-            </p>
-          </div>
-        ) : null}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {/* Repeat Limit */}
