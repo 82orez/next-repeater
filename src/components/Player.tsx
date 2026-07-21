@@ -166,7 +166,7 @@ export default function Player() {
 
   // ✅ 선택 구간(A–B)을 MP3로 추출 (비트레이트 선택 가능)
   const [extracting, setExtracting] = useState(false);
-  const [mp3Kbps, setMp3Kbps] = useState(192);
+  const [mp3Kbps, setMp3Kbps] = useState(128);
   const extractRegion = useCallback(async () => {
     if (!mediaUrl || !canLoop || extracting) return;
     const a = Math.min(loopA!, loopB!);
