@@ -159,22 +159,23 @@ export default function Player() {
 
   const controlsDisabled = !mediaUrl || !ws;
 
-  // ✅ 선택 구간(A–B)을 MP3로 추출
+  // ✅ 선택 구간(A–B)을 MP3로 추출 (비트레이트 선택 가능)
   const [extracting, setExtracting] = useState(false);
+  const [mp3Kbps, setMp3Kbps] = useState(192);
   const extractRegion = useCallback(async () => {
     if (!mediaUrl || !canLoop || extracting) return;
     const a = Math.min(loopA!, loopB!);
     const b = Math.max(loopA!, loopB!);
     setExtracting(true);
     try {
-      await extractRegionToMp3(mediaUrl, a, b, fileName);
+      await extractRegionToMp3(mediaUrl, a, b, fileName, mp3Kbps);
     } catch (e) {
       console.error(e);
       alert("구간 추출에 실패했습니다.");
     } finally {
       setExtracting(false);
     }
-  }, [mediaUrl, canLoop, extracting, loopA, loopB, fileName]);
+  }, [mediaUrl, canLoop, extracting, loopA, loopB, fileName, mp3Kbps]);
 
   // ✅ A(-3s) 버튼 동작:
   // 1) A/B 미설정이면: -3초 seek
@@ -471,15 +472,29 @@ export default function Player() {
               <span className="inline-flex items-center gap-2">Reset</span>
             </button>
 
-            {/* ✅ 선택 구간 WAV 추출 */}
-            <button
-              onClick={extractRegion}
-              disabled={!canLoop || controlsDisabled || extracting}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="선택한 A/B 구간을 MP3 파일로 저장">
-              <Download className="h-4 w-4" />
-              {extracting ? "추출 중…" : "구간 추출(MP3)"}
-            </button>
+            {/* ✅ 선택 구간 MP3 추출 (비트레이트 선택) */}
+            <div className="inline-flex items-center overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+              <button
+                onClick={extractRegion}
+                disabled={!canLoop || controlsDisabled || extracting}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                title="선택한 A/B 구간을 MP3 파일로 저장">
+                <Download className="h-4 w-4" />
+                {extracting ? "추출 중…" : "구간 추출(MP3)"}
+              </button>
+              <select
+                value={mp3Kbps}
+                onChange={(e) => setMp3Kbps(Number(e.target.value))}
+                disabled={extracting}
+                className="border-l border-zinc-200 bg-white py-2 pr-2 pl-2 text-sm text-zinc-700 outline-none hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                title="MP3 비트레이트 (높을수록 고음질·큰 용량)">
+                {[128, 192, 320].map((k) => (
+                  <option key={k} value={k}>
+                    {k}k
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* ✅ A부터 재생 (구간 유지) / (A/B 없으면 -3초) */}
             <button
