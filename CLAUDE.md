@@ -17,7 +17,7 @@ Next.js 16 App Router. 페이지 2개:
 
 - **구간 추출**(`src/lib/audioExport.ts`): A–B 구간 음원을 MP3/WAV로 다운로드. `mediaUrl`(blob) fetch→`decodeAudioData`→구간 슬라이스→인코딩. MP3는 `@breezystack/lamejs`(`extractRegionToMp3`, 비트레이트 인자), WAV는 순수 JS 인코더(`extractRegionToWav`). `Player.tsx`의 "구간 추출" 버튼+비트레이트 select(128/192/320k)로 호출, `canLoop`일 때만 활성.
 
-- **재생 실패 감지·변환**: `MediaView.tsx`의 `<video onError>`가 `MediaError.code`별 안내 표시(video면 오버레이, audio 분류/숨김이면 배너). 변환 요청 시 `Player.tsx`의 `convertMedia`→`src/lib/videoTranscode.ts`의 `transcodeToPlayableMp4`가 **ffmpeg.wasm으로 H.264+AAC MP4 재인코딩**(항상 완전 재인코딩=크롬 호환 보장) 후 blob URL로 `setSource` 교체. **ffmpeg 코어는 싱글스레드**(`@ffmpeg/core`)라 COOP/COEP 불필요, **`/public/ffmpeg`에 셀프 호스팅**(js+32MB wasm, `toBlobURL`로 로드). FFmpeg 인스턴스는 모듈 싱글턴(코어 재로드 방지).
+- **재생 실패 감지·변환·최적화**(`src/lib/videoTranscode.ts`): `MediaView.tsx`의 `<video onError>`가 `MediaError.code`별 안내(video면 오버레이, audio 분류/숨김이면 배너). 변환/최적화는 `Player.tsx`의 `runTranscode(opts, download)`(공용)→`transcodeVideo(url, name, {scaleHeight,crf,audioKbps})`가 **ffmpeg.wasm으로 H.264+AAC MP4 재인코딩** 후 blob URL로 `setSource` 교체(+옵션 다운로드). 두 진입점: ①코덱 오류 복구=`convertMedia`(원본 해상도 유지), ②"영상 최적화" 패널(video 로드 시 노출)=해상도(원본/720p/480p)·화질(crf 20/23/28) select+다운로드. `mediaSize`>700MB면 `confirm` 경고(wasm 메모리 한계). **코어는 싱글스레드**(`@ffmpeg/core`)라 COOP/COEP 불필요, **`/public/ffmpeg` 셀프 호스팅**(js+32MB wasm, `toBlobURL` 로드), FFmpeg는 모듈 싱글턴. 스트림은 `-map 0:v:0 -map 0:a:0?`로 비디오+오디오만.
 
 - **상태는 단일 Zustand 스토어**(`src/store/playerStore.ts`), `persist`로 `localStorage` 키 `repeat-player-v3`에 저장. `partialize`는 환경설정(rate/volume/zoom/repeatTarget/showVideo)+`bookmarks`+`recent`만 저장; 일시 상태(`ws`/`isPlaying`/`loopA`/`loopB`/`currentTime` 등)는 저장 안 함. **호환 깨지는 변경 시 `name` 키를 올리거나 마이그레이션 작성.**
 

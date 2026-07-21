@@ -33,12 +33,24 @@ async function getFFmpeg(): Promise<FFmpeg> {
 
 export type TranscodeProgress = (ratio: number) => void;
 
-// 원본(blob URL 등)을 크롬 호환 MP4로 변환하고 새 blob URL을 반환
-export async function transcodeToPlayableMp4(
+export type TranscodeOptions = {
+  scaleHeight?: number | null; // 세로 해상도(px). null/미지정 = 원본 유지
+  crf?: number; // H.264 품질(낮을수록 고화질·큰 용량). 기본 23
+  audioKbps?: number; // 오디오 비트레이트. 기본 160
+};
+
+// 원본(blob URL 등)을 크롬 호환 MP4(H.264+AAC)로 재인코딩하고 새 blob URL을 반환
+// - scaleHeight로 다운스케일, crf로 화질/용량 조절
+export async function transcodeVideo(
   sourceUrl: string,
   fileName?: string | null,
+  opts?: TranscodeOptions,
   onProgress?: TranscodeProgress,
 ): Promise<{ url: string; fileName: string }> {
+  const scaleHeight = opts?.scaleHeight ?? null;
+  const crf = opts?.crf ?? 23;
+  const audioKbps = opts?.audioKbps ?? 160;
+
   const ff = await getFFmpeg();
 
   const inName = "input" + inputExt(fileName);
@@ -52,17 +64,19 @@ export async function transcodeToPlayableMp4(
   try {
     await ff.writeFile(inName, await fetchFile(sourceUrl));
 
-    // H.264(video) + AAC(audio) 재인코딩. +faststart 로 웹 스트리밍 최적화.
-    await ff.exec([
-      "-i", inName,
+    // 데이터/자막 스트림 제외하고 첫 비디오·오디오만 사용, +faststart 로 웹 스트리밍 최적화
+    const args = ["-i", inName, "-map", "0:v:0", "-map", "0:a:0?"];
+    if (scaleHeight) args.push("-vf", `scale=-2:${scaleHeight}`);
+    args.push(
       "-c:v", "libx264",
       "-preset", "veryfast",
-      "-crf", "23",
+      "-crf", String(crf),
       "-c:a", "aac",
-      "-b:a", "160k",
+      "-b:a", `${audioKbps}k`,
       "-movflags", "+faststart",
       outName,
-    ]);
+    );
+    await ff.exec(args);
 
     const data = (await ff.readFile(outName)) as Uint8Array;
     const blob = new Blob([data as unknown as BlobPart], { type: "video/mp4" });
@@ -76,10 +90,19 @@ export async function transcodeToPlayableMp4(
       // ignore
     }
 
-    return { url, fileName: makeMp4Name(fileName) };
+    return { url, fileName: makeMp4Name(fileName, scaleHeight) };
   } finally {
     ff.off("progress", handleProgress);
   }
+}
+
+// 재생 실패(코덱) 시 호환 MP4로 변환 — 원본 해상도 유지, 기본 화질
+export function transcodeToPlayableMp4(
+  sourceUrl: string,
+  fileName?: string | null,
+  onProgress?: TranscodeProgress,
+): Promise<{ url: string; fileName: string }> {
+  return transcodeVideo(sourceUrl, fileName, undefined, onProgress);
 }
 
 // 원본 확장자를 살려 입력 파일명 생성(ffmpeg 포맷 추정에 도움)
@@ -88,9 +111,10 @@ function inputExt(fileName?: string | null): string {
   return m ? m[1].toLowerCase() : ".bin";
 }
 
-// 원본 파일명에서 확장자를 떼고 `_변환.mp4`
-function makeMp4Name(fileName?: string | null): string {
-  if (!fileName) return "converted.mp4";
+// 원본 파일명에서 확장자를 떼고 `_720p.mp4`(스케일 시) 또는 `_변환.mp4`
+function makeMp4Name(fileName?: string | null, scaleHeight?: number | null): string {
+  const suffix = scaleHeight ? `_${scaleHeight}p` : "_변환";
+  if (!fileName) return `converted${suffix}.mp4`;
   const base = fileName.replace(/\.[^/.]+$/, "");
-  return `${base}_변환.mp4`;
+  return `${base}${suffix}.mp4`;
 }
