@@ -18,6 +18,7 @@ import {
   Download,
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 import Waveform from "@/components/Waveform";
 import MediaView from "@/components/MediaView";
 import BookmarkPanel from "@/components/BookmarkPanel";
@@ -29,6 +30,10 @@ import { transcodeVideo, type TranscodeOptions } from "@/lib/videoTranscode";
 
 // 이 크기 초과 시 브라우저 변환(ffmpeg.wasm)은 메모리 한계로 불가 → 로컬 명령어로 유도
 const LARGE_BYTES = 700 * 1024 * 1024;
+
+// ✅ 업로드 차단 기준: 재생시간 90분 초과 OR 용량 1GB 초과 → 파형 디코드 시 브라우저 OOM(오류 5) 위험이라 처음부터 거부
+const MAX_UPLOAD_SEC = 90 * 60;
+const MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024;
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { TbRepeatOff } from "react-icons/tb";
 
@@ -86,10 +91,8 @@ export default function Player() {
 
   const onPickFile = () => fileInputRef.current?.click();
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-
+  // ✅ 실제 로드(검증 통과한 파일만): 기존 흐름 유지
+  const acceptFile = (f: File) => {
     // ✅ 이전 ObjectURL 정리(메모리 누수 방지)
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -114,6 +117,54 @@ export default function Player() {
         // ignore
       }
     }
+  };
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+
+    // 거부 시 같은 파일을 다시 선택할 수 있도록 input 값 초기화(비동기 콜백 대비 ref 사용)
+    const resetInput = () => {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    // ✅ 용량 차단(선택 즉시 판정 가능)
+    if (f.size > MAX_UPLOAD_BYTES) {
+      toast.warning("이 파일은 1GB를 초과해 업로드할 수 없습니다. 브라우저 메모리 보호를 위한 제한이에요.");
+      resetInput();
+      return;
+    }
+
+    // ✅ 재생시간 차단: metadata만 가볍게 로드해 duration 확인(전체 디코드 아님 → OOM 위험 없음)
+    const probeUrl = URL.createObjectURL(f);
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+
+    const cleanupProbe = () => {
+      probe.onloadedmetadata = null;
+      probe.onerror = null;
+      URL.revokeObjectURL(probeUrl);
+    };
+
+    probe.onloadedmetadata = () => {
+      const dur = probe.duration;
+      cleanupProbe();
+      // Infinity/NaN(일부 포맷)은 판정 불가 → 통과시켜 기존 흐름에 위임
+      if (isFinite(dur) && dur > MAX_UPLOAD_SEC) {
+        toast.warning("재생시간이 90분을 초과해 업로드할 수 없습니다. 브라우저 메모리 보호를 위한 제한이에요.");
+        resetInput();
+        return;
+      }
+      acceptFile(f);
+    };
+
+    probe.onerror = () => {
+      cleanupProbe();
+      // metadata를 못 읽어도 여기서 막지 않고 로드 → 기존 에러 처리에 위임
+      acceptFile(f);
+    };
+
+    probe.src = probeUrl;
   };
 
   useEffect(() => {
@@ -176,7 +227,7 @@ export default function Player() {
       await extractRegionToMp3(mediaUrl, a, b, fileName, mp3Kbps);
     } catch (e) {
       console.error(e);
-      alert("구간 추출에 실패했습니다.");
+      toast.error("구간 추출에 실패했습니다.");
     } finally {
       setExtracting(false);
     }
@@ -232,7 +283,7 @@ export default function Player() {
         }
       } catch (e) {
         console.error(e);
-        alert("변환에 실패했습니다. 파일이 너무 크면 브라우저에서 처리하지 못할 수 있어요 — 로컬 도구를 사용해 주세요.");
+        toast.error("변환에 실패했습니다. 파일이 너무 크면 브라우저에서 처리하지 못할 수 있어요 — 로컬 도구를 사용해 주세요.");
       } finally {
         setConverting(false);
       }

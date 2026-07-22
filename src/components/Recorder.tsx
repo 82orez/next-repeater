@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { Mic, Square, Play, Pause, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { usePlayerStore } from "@/store/playerStore";
 
 type Phase = "idle" | "recording" | "ready" | "playing";
@@ -127,7 +128,7 @@ export default function Recorder() {
     } catch (err) {
       console.error("녹음 시작 실패", err);
       stopStream();
-      alert("마이크에 접근할 수 없습니다. 브라우저 권한을 확인해 주세요.");
+      toast.error("마이크에 접근할 수 없습니다. 브라우저 권한을 확인해 주세요.");
     }
   }, [phase, revokeUrl, stopStream, stopTimer]);
 

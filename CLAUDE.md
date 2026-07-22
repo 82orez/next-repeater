@@ -35,7 +35,7 @@ Next.js 16 App Router. 페이지 2개:
 
 - **북마크**는 POINT/REGION 2종. REGION은 "구문(phrase)"으로 `Player.tsx`의 이전/다음 구문 버튼 구동.
 
-- **파일 로딩**은 `URL.createObjectURL`, 변경/언마운트 시 명시적 해제(`Player.tsx`의 `objectUrlRef`). blob 누수 방지 위해 이 라이프사이클 유지.
+- **파일 로딩**은 `URL.createObjectURL`, 변경/언마운트 시 명시적 해제(`Player.tsx`의 `objectUrlRef`). blob 누수 방지 위해 이 라이프사이클 유지. **업로드 차단 가드**: `onFileChange`에서 용량 `>MAX_UPLOAD_BYTES`(1GB)는 즉시, 재생시간 `>MAX_UPLOAD_SEC`(90분)는 임시 `<video preload=metadata>`로 duration만 프로브 후 거부(전체 디코드 시 파형용 PCM이 브라우저 OOM=오류5를 유발하기 때문). 통과분만 `acceptFile`로 로드, 거부 시 토스트+`fileInputRef.value=""`(재선택). 오디오·비디오 공통 적용.
 
 - **TTS**(`TtsClient.tsx`)는 Player와 독립, Zustand 없이 `useState`만 사용. API 라우트(`src/app/api/tts/route.ts`)가 OpenAI TTS 프록시, 키는 `.env.local`의 `OPENAI_API_KEY`. Object URL은 동일 패턴으로 언마운트 시 해제. 생성 버튼은 `window.confirm` 확인. `VOICES`는 `{id,label,gender,accent,desc}` 배열.
 
@@ -44,4 +44,5 @@ Next.js 16 App Router. 페이지 2개:
 - Prettier: 큰따옴표, `tabWidth:2`, `printWidth:150`, `trailingComma:"all"`, `endOfLine:"crlf"`, `prettier-plugin-tailwindcss`.
 - Tailwind v4(`@tailwindcss/postcss`), CSS는 `src/app/globals.css`(`@import "tailwindcss";`+range 슬라이더 커스텀).
 - 인터랙티브 컴포넌트·스토어는 모두 `"use client"`.
+- **사용자 알림은 `sonner` 토스트** — `alert` 쓰지 말 것. 전역 `<Toaster richColors position="top-center"/>`는 `layout.tsx`. `toast.error`(실패)/`toast.warning`(차단성 안내) 구분.
 - UI 문구·주석은 한국어 — 사용자 노출 문자열 수정 시 기존 언어 유지.
