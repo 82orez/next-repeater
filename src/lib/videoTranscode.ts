@@ -46,7 +46,7 @@ export async function transcodeVideo(
   fileName?: string | null,
   opts?: TranscodeOptions,
   onProgress?: TranscodeProgress,
-): Promise<{ url: string; blob: Blob; fileName: string }> {
+): Promise<{ url: string; fileName: string }> {
   const scaleHeight = opts?.scaleHeight ?? null;
   const crf = opts?.crf ?? 23;
   const audioKbps = opts?.audioKbps ?? 160;
@@ -90,7 +90,7 @@ export async function transcodeVideo(
       // ignore
     }
 
-    return { url, blob, fileName: makeMp4Name(fileName, scaleHeight) };
+    return { url, fileName: makeMp4Name(fileName, scaleHeight) };
   } finally {
     ff.off("progress", handleProgress);
   }
@@ -101,7 +101,7 @@ export function transcodeToPlayableMp4(
   sourceUrl: string,
   fileName?: string | null,
   onProgress?: TranscodeProgress,
-): Promise<{ url: string; blob: Blob; fileName: string }> {
+): Promise<{ url: string; fileName: string }> {
   return transcodeVideo(sourceUrl, fileName, undefined, onProgress);
 }
 

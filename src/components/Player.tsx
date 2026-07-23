@@ -72,7 +72,6 @@ export default function Player() {
   const bookmarks = usePlayerStore((s) => s.bookmarks);
 
   const setSource = usePlayerStore((s) => s.setSource);
-  const refreshMediaUrl = usePlayerStore((s) => s.refreshMediaUrl);
   const setPlaybackRate = usePlayerStore((s) => s.setPlaybackRate);
   const setVolume = usePlayerStore((s) => s.setVolume);
 
@@ -107,7 +106,7 @@ export default function Player() {
 
     const kind = f.type?.startsWith("video/") ? "video" : "audio";
 
-    setSource({ mediaUrl: url, mediaKind: kind, fileName: f.name, mediaFile: f });
+    setSource({ mediaUrl: url, mediaKind: kind, fileName: f.name });
     upsertRecent({ fileName: f.name, mediaUrl: url, mediaKind: kind, lastTime: 0 });
 
     // ✅ iOS/Safari에서 metadata 로딩 트리거가 필요한 경우를 대비
@@ -169,21 +168,9 @@ export default function Player() {
     probe.src = probeUrl;
   };
 
-  useEffect(() => {
-    return () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    };
-  }, []);
-
-  // ✅ 라우트 전환(STT/TTS) 후 복귀 시: 언마운트에서 폐기된 blob URL을 보관된 원본에서 재생성
-  useEffect(() => {
-    const { mediaFile } = usePlayerStore.getState();
-    if (!mediaFile || objectUrlRef.current) return;
-    const url = URL.createObjectURL(mediaFile);
-    objectUrlRef.current = url;
-    setMediaSize(mediaFile.size);
-    refreshMediaUrl(url);
-  }, []);
+  // ⚠️ blob URL은 언마운트(STT/TTS 라우트 전환)에서 revoke하지 않는다.
+  //    스토어(모듈 싱글턴)의 mediaUrl이 살아있어야 복귀 시 그대로 재생됨(Format error 방지).
+  //    revoke는 파일 교체(acceptFile)·변환(convertMedia) 시에만 수행 → 항상 1개만 존재하므로 누수 없음.
 
   const loopLabel = useMemo(() => {
     if (loopA == null && loopB == null) return "A/B 미설정";
@@ -262,7 +249,7 @@ export default function Player() {
       setConverting(true);
       setConvertProgress(0);
       try {
-        const { url, blob, fileName: newName } = await transcodeVideo(mediaUrl, fileName, opts, (r) => setConvertProgress(r));
+        const { url, fileName: newName } = await transcodeVideo(mediaUrl, fileName, opts, (r) => setConvertProgress(r));
 
         // 다운로드(최적화 결과 저장용)
         if (download) {
@@ -281,7 +268,7 @@ export default function Player() {
         objectUrlRef.current = url;
         setMediaSize(null); // 변환본 크기는 알 수 없음 → 이후 경고 생략
 
-        setSource({ mediaUrl: url, mediaKind: "video", fileName: newName, mediaFile: blob });
+        setSource({ mediaUrl: url, mediaKind: "video", fileName: newName });
         upsertRecent({ fileName: newName, mediaUrl: url, mediaKind: "video", lastTime: 0 });
 
         // iOS/Safari metadata 로딩 트리거(기존 패턴 유지)

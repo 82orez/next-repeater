@@ -35,7 +35,7 @@ Next.js 16 App Router. 페이지 2개:
 
 - **북마크**는 POINT/REGION 2종. REGION은 "구문(phrase)"으로 `Player.tsx`의 이전/다음 구문 버튼 구동.
 
-- **파일 로딩**은 `URL.createObjectURL`, 변경/언마운트 시 명시적 해제(`Player.tsx`의 `objectUrlRef`). blob 누수 방지 위해 이 라이프사이클 유지. **업로드 차단 가드**: `onFileChange`에서 용량 `>MAX_UPLOAD_BYTES`(1GB)는 즉시, 재생시간 `>MAX_UPLOAD_SEC`(90분)는 임시 `<video preload=metadata>`로 duration만 프로브 후 거부(전체 디코드 시 파형용 PCM이 브라우저 OOM=오류5를 유발하기 때문). 통과분만 `acceptFile`로 로드, 거부 시 토스트+`fileInputRef.value=""`(재선택). 오디오·비디오 공통 적용.
+- **파일 로딩**은 `URL.createObjectURL`(`Player.tsx`의 `objectUrlRef`). blob URL 해제(`revokeObjectURL`)는 **파일 교체(`acceptFile`)·변환(`convertMedia`) 시에만** 수행 — 항상 1개만 존재하므로 누수 없음. **언마운트(STT/TTS 라우트 전환)에서는 revoke하지 않음**: Zustand 스토어가 모듈 싱글턴이라 `mediaUrl`이 유지되는데 언마운트에서 blob을 죽이면 복귀 시 죽은 URL 로드→`Format error`(오류4)가 남기 때문. **업로드 차단 가드**: `onFileChange`에서 용량 `>MAX_UPLOAD_BYTES`(1GB)는 즉시, 재생시간 `>MAX_UPLOAD_SEC`(90분)는 임시 `<video preload=metadata>`로 duration만 프로브 후 거부(전체 디코드 시 파형용 PCM이 브라우저 OOM=오류5를 유발하기 때문). 통과분만 `acceptFile`로 로드, 거부 시 토스트+`fileInputRef.value=""`(재선택). 오디오·비디오 공통 적용.
 
 - **TTS**(`TtsClient.tsx`)는 Player와 독립, Zustand 없이 `useState`만 사용. API 라우트(`src/app/api/tts/route.ts`)가 OpenAI TTS 프록시, 키는 `.env.local`의 `OPENAI_API_KEY`. Object URL은 동일 패턴으로 언마운트 시 해제. 생성 버튼은 `window.confirm` 확인. `VOICES`는 `{id,label,gender,accent,desc}` 배열.
 
