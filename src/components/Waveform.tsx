@@ -6,6 +6,8 @@ import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import Minimap from "wavesurfer.js/dist/plugins/minimap.esm.js";
 import { usePlayerStore } from "@/store/playerStore";
+import { fmtTimeCS } from "@/lib/time";
+import TimeReadout from "@/components/TimeReadout";
 
 const AB_REGION_ID = "ab_region";
 const MARK_A_ID = "mark_a";
@@ -14,20 +16,6 @@ const RB_TMP_ID = "rb_tmp";
 
 // ✅ 스냅 간격(0.01초)
 const SNAP_SEC = 0.01;
-
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-// ✅ 01:23.45 형태(centisecond=1/100s)
-function fmtTimeCS(sec: number) {
-  const s = Math.max(0, sec);
-  const totalCs = Math.round(s * 100); // centiseconds
-  const mm = Math.floor(totalCs / (60 * 100));
-  const ss = Math.floor((totalCs % (60 * 100)) / 100);
-  const cs = totalCs % 100;
-  return `${pad2(mm)}:${pad2(ss)}.${pad2(cs)}`;
-}
 
 // ✅ 로딩 에러를 사용자 친화적 한국어 안내로 변환
 // - NotReadableError(파일 읽기 실패)는 코덱이 아니라 iCloud 미다운로드/파일 이동/대용량이 원인
@@ -961,6 +949,11 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
       {/* A/B 텍스트 + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          {/* 현재 재생 위치 / 전체 길이 */}
+          <div className="mb-1 flex w-full items-center justify-center">
+            <TimeReadout />
+          </div>
+
           <div className="flex w-full flex-wrap items-center justify-center gap-6 text-zinc-700">
             <button
               type="button"
