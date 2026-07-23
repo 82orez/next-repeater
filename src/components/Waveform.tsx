@@ -909,8 +909,11 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
         </div>
       )}
 
+      {/* Main waveform */}
+      <div key="main-wave" ref={containerRef} className="w-full" />
+
       {/* Overview / Minimap + Zoom */}
-      <div className="mb-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
+      <div key="overview" className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-2">
         <div className="mb-1 flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-zinc-700">Overview</div>
           <div className="flex items-center gap-1">
@@ -954,9 +957,6 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
         </div>
         <div ref={minimapRef} className="w-full" />
       </div>
-
-      {/* Main waveform */}
-      <div ref={containerRef} className="w-full" />
 
       {/* A/B 텍스트 + 클릭하면 seek */}
       <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
