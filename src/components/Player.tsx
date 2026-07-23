@@ -16,6 +16,7 @@ import {
   ArrowLeftToLine,
   ArrowRightFromLine,
   Download,
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -464,12 +465,20 @@ export default function Player() {
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Repeat Player</h1>
             <p className="mt-2 text-sm text-zinc-600">Ctrl/⌘+휠 줌으로 긴 오디오도 정밀하게 A–B 구간을 설정할 수 있어요.</p>
           </div>
-          <Link
-            href="/tts"
-            className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
-            <Volume2 className="h-4 w-4" />
-            TTS
-          </Link>
+          <div className="flex shrink-0 gap-2">
+            <Link
+              href="/stt"
+              className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
+              <FileText className="h-4 w-4" />
+              STT
+            </Link>
+            <Link
+              href="/tts"
+              className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
+              <Volume2 className="h-4 w-4" />
+              TTS
+            </Link>
+          </div>
         </div>
       </header>
 
