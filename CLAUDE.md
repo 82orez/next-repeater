@@ -7,9 +7,10 @@
 - lint/test 스크립트 없음 — 만들지 마세요.
 
 ## 아키텍처
-Next.js 16 App Router. 페이지 2개:
+Next.js 16 App Router. 페이지 3개:
 - **`/`** → `<Player />` (`src/app/page.tsx`): 오디오/비디오 A–B 반복 재생기.
 - **`/tts`** → `<TtsClient />` (`src/app/tts/page.tsx`): OpenAI TTS로 텍스트→음성 변환·다운로드.
+- **`/stt`** → `<SttClient />` (`src/app/stt/page.tsx`): OpenAI Whisper/gpt-4o-transcribe로 음성 파일→텍스트 추출.
 
 로직은 `src/components`, `src/store`에 있음. 파일에 걸쳐 알아둘 사항:
 
@@ -21,7 +22,7 @@ Next.js 16 App Router. 페이지 2개:
 
 - **상태는 단일 Zustand 스토어**(`src/store/playerStore.ts`), `persist`로 `localStorage` 키 `repeat-player-v3`에 저장. `partialize`는 환경설정(rate/volume/zoom/repeatTarget/showVideo)+`bookmarks`+`recent`만 저장; 일시 상태(`ws`/`isPlaying`/`loopA`/`loopB`/`currentTime` 등)는 저장 안 함. **호환 깨지는 변경 시 `name` 키를 올리거나 마이그레이션 작성.**
 
-- **WaveSurfer는 `Waveform.tsx`가 소유**, `setWs`로 스토어에 게시. 타 컴포넌트는 스토어 경유로 트랜스포트 함수(`play`/`pause`/`setTime`/`seekBy`/`setPlaybackRate`/`setVolume`) 호출→스토어가 `ws`로 전달. `Waveform.tsx` 밖에서 WaveSurfer ref 보유 금지.
+- **WaveSurfer는 `Waveform.tsx`가 소유**, `setWs`로 스토어에 게시. 타 컴포넌트는 스토어 경유로 트랜스포트 함수(`play`/`pause`/`setTime`/`seekBy`/`setPlaybackRate`/`setVolume`) 호출→스토어가 `ws`로 전달. `Waveform.tsx` 밖에서 WaveSurfer ref 보유 금지. **라우트 복귀 시 재생 위치 복원**: `resumeTimeRef`가 렌더 시점(=load 이펙트의 `setCurrentTime(0)`보다 먼저)에 스토어 `currentTime`을 캡처→`ready`에서 1회 seek. 렌더 선행이라 Strict Mode 이중 실행에도 안전. (복귀 시 파형은 피크 캐시가 없어 재디코딩됨 — 의도된 동작.)
 
 - **A–B 루프 = `loopEnabled` 기준 2모드:**
   - ON: A→B 반복, `repeatTarget` 따름. 재시작은 시크 경합 회피 위해 `play(start)` 사용(`setTime`+`play` 아님). `loopGuardRef`/`loopPendingRef`가 `repeatCount` 이중 증가 방지.
@@ -38,6 +39,8 @@ Next.js 16 App Router. 페이지 2개:
 - **파일 로딩**은 `URL.createObjectURL`(`Player.tsx`의 `objectUrlRef`). blob URL 해제(`revokeObjectURL`)는 **파일 교체(`acceptFile`)·변환(`convertMedia`) 시에만** 수행 — 항상 1개만 존재하므로 누수 없음. **언마운트(STT/TTS 라우트 전환)에서는 revoke하지 않음**: Zustand 스토어가 모듈 싱글턴이라 `mediaUrl`이 유지되는데 언마운트에서 blob을 죽이면 복귀 시 죽은 URL 로드→`Format error`(오류4)가 남기 때문. **업로드 차단 가드**: `onFileChange`에서 용량 `>MAX_UPLOAD_BYTES`(1GB)는 즉시, 재생시간 `>MAX_UPLOAD_SEC`(90분)는 임시 `<video preload=metadata>`로 duration만 프로브 후 거부(전체 디코드 시 파형용 PCM이 브라우저 OOM=오류5를 유발하기 때문). 통과분만 `acceptFile`로 로드, 거부 시 토스트+`fileInputRef.value=""`(재선택). 오디오·비디오 공통 적용.
 
 - **TTS**(`TtsClient.tsx`)는 Player와 독립, Zustand 없이 `useState`만 사용. API 라우트(`src/app/api/tts/route.ts`)가 OpenAI TTS 프록시, 키는 `.env.local`의 `OPENAI_API_KEY`. Object URL은 동일 패턴으로 언마운트 시 해제. 생성 버튼은 `window.confirm` 확인. `VOICES`는 `{id,label,gender,accent,desc}` 배열.
+
+- **STT**(`SttClient.tsx`)는 TTS와 대칭 구조(독립·`useState`만·`window.confirm`). API 라우트(`src/app/api/stt/route.ts`)가 `request.formData()`로 파일 받아 OpenAI `audio.transcriptions`(`response_format:"text"`) 프록시, 키 동일 재사용. 모델 화이트리스트 `gpt-4o-transcribe`/`whisper-1`(기본·가운데)/`gpt-4o-mini-transcribe`. **25MB 제한**(서버+클라이언트 이중 가드). 결과는 textarea+복사+`.txt` 다운로드. `Player.tsx` 헤더에 STT/TTS 링크.
 
 ## 컨벤션
 - 별칭 `@/*`→`./src/*`. `strict:false`/`noImplicitAny:false` 유지 — 문의 없이 강화 금지.
