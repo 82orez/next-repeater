@@ -45,6 +45,9 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
   // ✅ region-updated에서 우리가 setOptions로 다시 보정할 때 무한루프 방지
   const snapApplyingRef = useRef(false);
 
+  // ✅ 라우트 복귀(리마운트) 시 직전 재생 위치 복원용 — 렌더 시점에 캡처(load 이펙트의 setCurrentTime(0)보다 먼저)
+  const resumeTimeRef = useRef<number>(usePlayerStore.getState().currentTime || 0);
+
   // ✅ 우클릭 드래그 상태
   const rbSelectingRef = useRef(false);
   const rbStartTimeRef = useRef(0);
@@ -329,6 +332,15 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
     ws.on("ready", () => {
       setReady(true);
       setDuration(ws.getDuration());
+
+      // ✅ 라우트 복귀 시 직전 위치 복원(1회성). fresh 파일 로드 시엔 0으로 리셋되어 적용 안 됨.
+      const resume = resumeTimeRef.current;
+      resumeTimeRef.current = 0;
+      const dur = ws.getDuration();
+      if (resume > 0.05 && resume < dur - 0.05) {
+        ws.setTime(resume);
+        setCurrentTime(resume);
+      }
 
       const st = usePlayerStore.getState();
       ws.setPlaybackRate(st.playbackRate);
