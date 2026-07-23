@@ -33,6 +33,8 @@ type PlayerState = {
   mediaUrl: string | null;
   mediaKind: MediaKind;
   fileName: string | null;
+  // ✅ 원본 Blob/File 보관(비영속) — 라우트 전환 후 복귀 시 objectURL 재생성용
+  mediaFile: File | Blob | null;
 
   showVideo: boolean;
   setShowVideo: (v: boolean) => void;
@@ -59,7 +61,9 @@ type PlayerState = {
   bookmarks: Bookmark[];
   recent: RecentItem[];
 
-  setSource: (payload: { mediaUrl: string; mediaKind: MediaKind; fileName?: string | null }) => void;
+  setSource: (payload: { mediaUrl: string; mediaKind: MediaKind; fileName?: string | null; mediaFile?: File | Blob | null }) => void;
+  // ✅ 복귀 시 죽은 blob URL만 산 URL로 교체(loop 등 다른 상태는 보존)
+  refreshMediaUrl: (mediaUrl: string) => void;
   setReady: (ready: boolean) => void;
   setPlaying: (playing: boolean) => void;
   setDuration: (duration: number) => void;
@@ -106,6 +110,7 @@ export const usePlayerStore = create<PlayerState>()(
       mediaUrl: null,
       mediaKind: "audio",
       fileName: null,
+      mediaFile: null,
 
       showVideo: true,
       setShowVideo: (v) => set({ showVideo: v }),
@@ -135,11 +140,12 @@ export const usePlayerStore = create<PlayerState>()(
       bookmarks: [],
       recent: [],
 
-      setSource: ({ mediaUrl, mediaKind, fileName }) => {
+      setSource: ({ mediaUrl, mediaKind, fileName, mediaFile }) => {
         set({
           mediaUrl,
           mediaKind,
           fileName: fileName ?? null,
+          mediaFile: mediaFile ?? get().mediaFile,
           isReady: false,
           isPlaying: false,
           duration: 0,
@@ -150,6 +156,8 @@ export const usePlayerStore = create<PlayerState>()(
           repeatCount: 0,
         });
       },
+
+      refreshMediaUrl: (mediaUrl) => set({ mediaUrl }),
 
       setReady: (ready) => set({ isReady: ready }),
       setPlaying: (playing) => set({ isPlaying: playing }),
