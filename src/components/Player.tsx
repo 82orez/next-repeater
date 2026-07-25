@@ -594,11 +594,10 @@ export default function Player() {
             convertProgress={convertProgress}
             largeFile={isLarge}
           />
+          {/* ✅ 자막 — 영상 바로 아래(파형 위). 없으면 스스로 렌더하지 않음 */}
+          <CaptionPanel />
           <Waveform mediaRef={mediaRef} />
         </div>
-
-        {/* ✅ 자막 (없으면 스스로 렌더하지 않음) */}
-        <CaptionPanel />
 
         {/* ✅ Transport */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">

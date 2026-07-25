@@ -33,7 +33,7 @@ export default function CaptionPanel() {
   const active = subs.filter((s) => s.enabled);
 
   return (
-    <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="my-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">자막</span>
         {subs.map((t) => (
