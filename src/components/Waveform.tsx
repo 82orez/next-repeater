@@ -159,7 +159,6 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
     Object.values(regions.getRegions()).forEach((r: any) => r.remove());
   };
 
-
   // ✅ 스냅 유틸
   const snapTime = (t: number, dur: number) => {
     const clamped = Math.min(dur, Math.max(0, t));

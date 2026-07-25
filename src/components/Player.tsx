@@ -24,10 +24,13 @@ import Waveform from "@/components/Waveform";
 import MediaView from "@/components/MediaView";
 import BookmarkPanel from "@/components/BookmarkPanel";
 import Recorder from "@/components/Recorder";
+import CaptionPanel from "@/components/CaptionPanel";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
 import { extractRegionToMp3 } from "@/lib/audioExport";
 import { transcodeVideo, type TranscodeOptions } from "@/lib/videoTranscode";
+import { parseSubtitles, labelFromFileName, SUB_EXT_RE, type SubTrack } from "@/lib/subtitles";
+import { uid } from "@/lib/id";
 
 // 이 크기 초과 시 브라우저 변환(ffmpeg.wasm)은 메모리 한계로 불가 → 로컬 명령어로 유도
 const LARGE_BYTES = 700 * 1024 * 1024;
@@ -35,6 +38,9 @@ const LARGE_BYTES = 700 * 1024 * 1024;
 // ✅ 업로드 차단 기준: 재생시간 90분 초과 OR 용량 1GB 초과 → 파형 디코드 시 브라우저 OOM(오류 5) 위험이라 처음부터 거부
 const MAX_UPLOAD_SEC = 90 * 60;
 const MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024;
+
+// 자막은 텍스트라 훨씬 작다(1시간 분량이 ~80KB) — 오선택 방지용 상한
+const MAX_SUB_BYTES = 5 * 1024 * 1024;
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { TbRepeatOff } from "react-icons/tb";
 
@@ -90,6 +96,8 @@ export default function Player() {
   const upsertRecent = usePlayerStore((s) => s.upsertRecent);
   const updateRecentTime = usePlayerStore((s) => s.updateRecentTime);
 
+  const addSubs = usePlayerStore((s) => s.addSubs);
+
   const onPickFile = () => fileInputRef.current?.click();
 
   // ✅ 실제 로드(검증 통과한 파일만): 기존 흐름 유지
@@ -120,13 +128,71 @@ export default function Player() {
     }
   };
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
+  // ✅ 자막 파일 → SubTrack 파싱(실패한 파일은 토스트로 알리고 건너뜀)
+  const readSubtitleFiles = async (files: File[]): Promise<SubTrack[]> => {
+    const tracks: SubTrack[] = [];
+
+    for (const f of files) {
+      if (f.size > MAX_SUB_BYTES) {
+        toast.warning(`${f.name}: 자막 파일이 너무 큽니다(5MB 초과).`);
+        continue;
+      }
+      try {
+        const raw = await f.text();
+        // File.text()는 UTF-8 고정 → CP949/EUC-KR 자막은 U+FFFD로 깨진다
+        if (raw.includes("�")) {
+          toast.warning(`${f.name}: UTF-8이 아닌 것 같습니다. 글자가 깨져 보이면 UTF-8로 저장해 다시 불러오세요.`);
+        }
+        const cues = parseSubtitles(raw);
+        if (cues.length === 0) {
+          toast.warning(`${f.name}: 읽을 수 있는 자막이 없습니다.`);
+          continue;
+        }
+        const { label, lang } = labelFromFileName(f.name);
+        tracks.push({ id: uid(), label, lang, fileName: f.name, cues, enabled: true });
+      } catch {
+        toast.error(`${f.name}: 자막을 읽지 못했습니다.`);
+      }
+    }
+
+    return tracks;
+  };
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0) return;
 
     // 거부 시 같은 파일을 다시 선택할 수 있도록 input 값 초기화(비동기 콜백 대비 ref 사용)
     const resetInput = () => {
       if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    // ✅ 분류는 확장자 기준 — .srt는 MIME이 비어 있거나 text/plain으로 들어온다
+    const subFiles = picked.filter((f) => SUB_EXT_RE.test(f.name));
+    const mediaFiles = picked.filter((f) => !SUB_EXT_RE.test(f.name));
+
+    if (mediaFiles.length > 1) {
+      toast.warning("미디어 파일은 한 번에 하나만 열 수 있습니다. 첫 번째 파일만 불러옵니다.");
+    }
+
+    // 자막은 먼저 파싱해 두고, 장착은 acceptFile 이후에 한다(아래 ⚠️ 참고)
+    const tracks = await readSubtitleFiles(subFiles);
+
+    const f = mediaFiles[0];
+    if (!f) {
+      // 자막만 고른 경우 = 재생 중 자막 추가 → 미디어는 건드리지 않는다
+      if (tracks.length > 0) {
+        addSubs(tracks);
+        toast.success(`자막 ${tracks.length}개를 불러왔습니다.`);
+      }
+      resetInput();
+      return;
+    }
+
+    // ⚠️ setSource가 subs를 비우므로 자막은 반드시 acceptFile "이후"에 붙인다
+    const acceptWithSubs = (file: File) => {
+      acceptFile(file);
+      if (tracks.length > 0) addSubs(tracks);
     };
 
     // ✅ 용량 차단(선택 즉시 판정 가능)
@@ -156,13 +222,13 @@ export default function Player() {
         resetInput();
         return;
       }
-      acceptFile(f);
+      acceptWithSubs(f);
     };
 
     probe.onerror = () => {
       cleanupProbe();
       // metadata를 못 읽어도 여기서 막지 않고 로드 → 기존 에러 처리에 위임
-      acceptFile(f);
+      acceptWithSubs(f);
     };
 
     probe.src = probeUrl;
@@ -492,7 +558,8 @@ export default function Player() {
 
           {/* 상단: 파일 불러오기 */}
           <div className="flex flex-wrap items-center gap-2">
-            <input ref={fileInputRef} type="file" accept="audio/*,video/mp4,video/*" className="hidden" onChange={onFileChange} />
+            {/* 미디어와 자막(.srt/.vtt)을 한 번에 고를 수 있다 — 분류는 onFileChange가 확장자로 처리 */}
+            <input ref={fileInputRef} type="file" multiple accept="audio/*,video/mp4,video/*,.srt,.vtt" className="hidden" onChange={onFileChange} />
             <button
               onClick={onPickFile}
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
@@ -529,6 +596,9 @@ export default function Player() {
           />
           <Waveform mediaRef={mediaRef} />
         </div>
+
+        {/* ✅ 자막 (없으면 스스로 렌더하지 않음) */}
+        <CaptionPanel />
 
         {/* ✅ Transport */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">

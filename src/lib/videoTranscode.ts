@@ -67,6 +67,8 @@ export async function transcodeVideo(
     // 데이터/자막 스트림 제외하고 첫 비디오·오디오만 사용, +faststart 로 웹 스트리밍 최적화
     const args = ["-i", inName, "-map", "0:v:0", "-map", "0:a:0?"];
     if (scaleHeight) args.push("-vf", `scale=-2:${scaleHeight}`);
+    // ffmpeg 인자는 플래그/값 쌍으로 읽어야 해서 한 줄씩 펼치지 않는다
+    // prettier-ignore
     args.push(
       "-c:v", "libx264",
       "-preset", "veryfast",

@@ -38,13 +38,15 @@ Next.js 16 App Router. 페이지 3개:
 
 - **파일 로딩**은 `URL.createObjectURL`(`Player.tsx`의 `objectUrlRef`). blob URL 해제(`revokeObjectURL`)는 **파일 교체(`acceptFile`)·변환(`convertMedia`) 시에만** 수행 — 항상 1개만 존재하므로 누수 없음. **언마운트(STT/TTS 라우트 전환)에서는 revoke하지 않음**: Zustand 스토어가 모듈 싱글턴이라 `mediaUrl`이 유지되는데 언마운트에서 blob을 죽이면 복귀 시 죽은 URL 로드→`Format error`(오류4)가 남기 때문. **업로드 차단 가드**: `onFileChange`에서 용량 `>MAX_UPLOAD_BYTES`(1GB)는 즉시, 재생시간 `>MAX_UPLOAD_SEC`(90분)는 임시 `<video preload=metadata>`로 duration만 프로브 후 거부(전체 디코드 시 파형용 PCM이 브라우저 OOM=오류5를 유발하기 때문). 통과분만 `acceptFile`로 로드, 거부 시 토스트+`fileInputRef.value=""`(재선택). 오디오·비디오 공통 적용.
 
+- **자막**(`src/lib/subtitles.ts` + `CaptionPanel.tsx`): 미디어 입력과 **같은 file input**으로 받는다(`multiple`, `accept`에 `.srt,.vtt`). **분류는 확장자(`SUB_EXT_RE`) 기준 — `.srt`는 MIME이 비거나 `text/plain`이라 `file.type` 신뢰 금지.** `parseSubtitles`가 SRT/VTT를 한 경로로 파싱(BOM·CRLF·`WEBVTT`/`NOTE` 블록·cue setting·`<i>` 태그·**방향제어문자 U+202A**(넷플릭스 자막) 제거, start 정렬). ⚠️ **`setSource`가 `subs: []`로 비우므로 자막 장착은 반드시 `acceptFile` 이후**(`onFileChange`의 `acceptWithSubs`) — 순서 뒤집으면 조용히 사라짐. 자막만 선택 시엔 미디어를 건드리지 않고 `addSubs`만. **`findCueText`는 순수 이진 탐색이어야 한다** — A–B 루프 재시작(`play(a)`)이 시간을 뒤로 점프시켜 전진 포인터 방식은 되감김마다 desync. 렌더는 트랙당 leaf(`CueLine`)가 **문자열 반환 셀렉터**를 써서 rAF(~60Hz) `timeupdate` 중 큐 경계에서만 리렌더(`TimeReadout`과 동일 전략). `subs`는 미디어 종속이라 **`partialize` 제외**. 표시는 영상 오버레이가 아닌 독립 카드 → 비디오 숨김·오디오 전용에서도 동작하며 **`MediaView`는 무관여**.
+
 - **TTS**(`TtsClient.tsx`)는 Player와 독립, Zustand 없이 `useState`만 사용. API 라우트(`src/app/api/tts/route.ts`)가 OpenAI TTS 프록시, 키는 `.env.local`의 `OPENAI_API_KEY`. Object URL은 동일 패턴으로 언마운트 시 해제. 생성 버튼은 `window.confirm` 확인. `VOICES`는 `{id,label,gender,accent,desc}` 배열.
 
 - **STT**(`SttClient.tsx`)는 TTS와 대칭 구조(독립·`useState`만·`window.confirm`). API 라우트(`src/app/api/stt/route.ts`)가 `request.formData()`로 파일 받아 OpenAI `audio.transcriptions`(`response_format:"text"`) 프록시, 키 동일 재사용. 모델 화이트리스트 `gpt-4o-transcribe`/`whisper-1`(기본·가운데)/`gpt-4o-mini-transcribe`. **25MB 제한**(서버+클라이언트 이중 가드). 결과는 textarea+복사+`.txt` 다운로드. `Player.tsx` 헤더에 STT/TTS 링크.
 
 ## 컨벤션
 - 별칭 `@/*`→`./src/*`. `strict:false`/`noImplicitAny:false` 유지 — 문의 없이 강화 금지.
-- Prettier: 큰따옴표, `tabWidth:2`, `printWidth:150`, `trailingComma:"all"`, `endOfLine:"crlf"`, `prettier-plugin-tailwindcss`.
+- Prettier: 큰따옴표, `tabWidth:2`, `printWidth:150`, `trailingComma:"all"`, **`endOfLine:"lf"`**, **`bracketSameLine:true`**(JSX 여는 태그의 `>`는 마지막 속성과 같은 줄), `prettier-plugin-tailwindcss`. 리포지토리는 전부 LF이고 `core.autocrlf=input`이라 커밋 시에도 LF로 정규화된다 — CRLF로 저장하지 말 것.
 - Tailwind v4(`@tailwindcss/postcss`), CSS는 `src/app/globals.css`(`@import "tailwindcss";`+range 슬라이더 커스텀).
 - **커서는 전역 처리** — `globals.css`의 `@layer base`가 `button`/`select`/`label[for]`/`[role=button]`에 `cursor-pointer`, disabled에 `cursor-not-allowed`를 건다. **새 버튼에 `cursor-pointer` 붙이지 말 것**(중복). `@layer base`라 개별 `cursor-*` 유틸리티는 그대로 오버라이드됨. 파형/미니맵 컨테이너는 `<div>`라 미적용(의도).
 - 인터랙티브 컴포넌트·스토어는 모두 `"use client"`.

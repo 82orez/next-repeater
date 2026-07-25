@@ -41,13 +41,7 @@ async function decodeRegion(mediaUrl: string, startSec: number, endSec: number):
 }
 
 // 선택 구간을 MP3로 추출
-export async function extractRegionToMp3(
-  mediaUrl: string,
-  startSec: number,
-  endSec: number,
-  fileName?: string | null,
-  kbps = 192,
-): Promise<void> {
+export async function extractRegionToMp3(mediaUrl: string, startSec: number, endSec: number, fileName?: string | null, kbps = 192): Promise<void> {
   const { channels, sampleRate } = await decodeRegion(mediaUrl, startSec, endSec);
   const blob = encodeMp3(channels, sampleRate, kbps);
   triggerDownload(blob, makeFileName(fileName, "mp3"));

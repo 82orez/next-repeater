@@ -4,6 +4,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type WaveSurfer from "wavesurfer.js";
+import type { SubTrack } from "@/lib/subtitles";
 
 export type MediaKind = "audio" | "video";
 
@@ -58,6 +59,12 @@ type PlayerState = {
 
   bookmarks: Bookmark[];
   recent: RecentItem[];
+
+  // ✅ 자막 트랙(미디어 종속) — persist 대상 아님, setSource에서 초기화됨
+  subs: SubTrack[];
+  addSubs: (tracks: SubTrack[]) => void;
+  toggleSub: (id: string) => void;
+  clearSubs: () => void;
 
   setSource: (payload: { mediaUrl: string; mediaKind: MediaKind; fileName?: string | null }) => void;
   setReady: (ready: boolean) => void;
@@ -135,6 +142,12 @@ export const usePlayerStore = create<PlayerState>()(
       bookmarks: [],
       recent: [],
 
+      subs: [],
+      // 같은 파일을 다시 고르면 교체(중복 방지)
+      addSubs: (tracks) => set({ subs: [...get().subs.filter((s) => !tracks.some((t) => t.fileName === s.fileName)), ...tracks] }),
+      toggleSub: (id) => set({ subs: get().subs.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)) }),
+      clearSubs: () => set({ subs: [] }),
+
       setSource: ({ mediaUrl, mediaKind, fileName }) => {
         set({
           mediaUrl,
@@ -148,6 +161,9 @@ export const usePlayerStore = create<PlayerState>()(
           loopA: null,
           loopB: null,
           repeatCount: 0,
+          // ⚠️ 자막은 미디어 종속 → 새 파일을 열면 반드시 비운다.
+          //    (그래서 Player의 파일 선택은 acceptFile → addSubs 순서를 지켜야 한다.)
+          subs: [],
         });
       },
 

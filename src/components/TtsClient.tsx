@@ -148,7 +148,11 @@ export default function TtsClient() {
                   <span
                     className={clsx(
                       "rounded px-1 py-0.5 text-[10px] font-medium",
-                      v.gender === "남성" ? "bg-blue-100 text-blue-700" : v.gender === "여성" ? "bg-rose-100 text-rose-700" : "bg-zinc-100 text-zinc-600",
+                      v.gender === "남성"
+                        ? "bg-blue-100 text-blue-700"
+                        : v.gender === "여성"
+                          ? "bg-rose-100 text-rose-700"
+                          : "bg-zinc-100 text-zinc-600",
                     )}>
                     {v.gender}
                   </span>
