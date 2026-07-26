@@ -49,6 +49,7 @@ Next.js 16 App Router. 페이지 3개:
 - Prettier: 큰따옴표, `tabWidth:2`, `printWidth:150`, `trailingComma:"all"`, **`endOfLine:"lf"`**, **`bracketSameLine:true`**(JSX 여는 태그의 `>`는 마지막 속성과 같은 줄), `prettier-plugin-tailwindcss`. 리포지토리는 전부 LF이고 `core.autocrlf=input`이라 커밋 시에도 LF로 정규화된다 — CRLF로 저장하지 말 것.
 - Tailwind v4(`@tailwindcss/postcss`), CSS는 `src/app/globals.css`(`@import "tailwindcss";`+range 슬라이더 커스텀).
 - **커서는 전역 처리** — `globals.css`의 `@layer base`가 `button`/`select`/`label[for]`/`[role=button]`에 `cursor-pointer`, disabled에 `cursor-not-allowed`를 건다. **새 버튼에 `cursor-pointer` 붙이지 말 것**(중복). `@layer base`라 개별 `cursor-*` 유틸리티는 그대로 오버라이드됨. 파형/미니맵 컨테이너는 `<div>`라 미적용(의도).
+- **로딩 표시는 CSS 스피너** — `animate-spin rounded-full border-2` + `border-t-*`(밝은 배경엔 `border-zinc-300 border-t-zinc-700`, 어두운 버튼엔 `border-zinc-400 border-t-white`). lucide 스피너 아이콘 쓰지 말 것. 버튼에선 라벨을 그대로 두고 **아이콘 자리만 스피너로 교체**해 폭 흔들림을 막는다(`Player.tsx` 구간 추출).
 - 인터랙티브 컴포넌트·스토어는 모두 `"use client"`.
 - **사용자 알림은 `sonner` 토스트** — `alert` 쓰지 말 것. 전역 `<Toaster richColors position="top-center"/>`는 `layout.tsx`. `toast.error`(실패)/`toast.warning`(차단성 안내) 구분.
 - UI 문구·주석은 한국어 — 사용자 노출 문자열 수정 시 기존 언어 유지.
