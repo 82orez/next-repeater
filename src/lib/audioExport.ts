@@ -17,8 +17,11 @@ async function decodeRegion(mediaUrl: string, startSec: number, endSec: number):
   const ctx = new Ctx();
   try {
     // decodeAudioData는 브라우저에 따라 Promise/콜백 두 형태라 래핑
+    // ⚠️ 사본(.slice(0))을 넘기지 않는다 — decodeAudioData가 인자를 detach하므로 그대로 넘겨야
+    //    파일 크기만큼(장편은 수백 MB) 즉시 해제된다. 사본을 넘기면 원본이 살아남아 두 배로 든다.
+    //    아래에서 arrayBuffer를 다시 쓰지 않으므로 detach되어도 안전.
     const audioBuffer: AudioBuffer = await new Promise((resolve, reject) => {
-      ctx.decodeAudioData(arrayBuffer.slice(0), resolve, reject);
+      ctx.decodeAudioData(arrayBuffer, resolve, reject);
     });
 
     const sampleRate = audioBuffer.sampleRate;
