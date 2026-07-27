@@ -29,12 +29,89 @@ const MODELS = [
   { id: "tts-1-hd", label: "고품질 (tts-1-hd)", instructable: false },
 ] as const;
 // 라벨은 한국어, 본문은 영어 — 모델이 영어 지시를 더 안정적으로 따른다.
+// ⚠️ 본문은 openai.fm 형식의 다속성 블록(Voice Affect/Tone/Pacing/...)을 유지할 것.
+// 한 줄 요약으로 줄이면 톤 차이가 거의 들리지 않는다. 구체적 화자상이 형용사 나열보다 강하게 먹힌다.
 const INSTRUCTION_PRESETS = [
-  { label: "밝고 활기차게", text: "Speak in a bright, upbeat and energetic tone." },
-  { label: "차분하고 느리게", text: "Speak in a calm, gentle voice at a slow, relaxed pace." },
-  { label: "뉴스 앵커처럼", text: "Speak like a professional news anchor: clear, neutral and authoritative." },
-  { label: "속삭이듯", text: "Speak in a soft, intimate whisper." },
-  { label: "동화 구연", text: "Speak like a warm storyteller reading a children's book, with playful expression." },
+  {
+    label: "뉴스 앵커",
+    text: [
+      "Voice Affect: Crisp, authoritative, and broadcast-trained; the steady presence of a prime-time news anchor.",
+      "Tone: Neutral and factual, with no emotional coloring or editorializing.",
+      "Pacing: Measured and even, with a clear beat between sentences.",
+      "Emphasis: Stress proper names, numbers, and place names so they land clearly.",
+      "Pronunciation: Fully articulated consonants; never drop word endings.",
+    ].join("\n"),
+  },
+  {
+    label: "차분한 강의",
+    text: [
+      "Voice Affect: Calm, patient, and quietly confident, like a professor explaining a difficult idea to a student who is genuinely curious.",
+      "Tone: Warm but unhurried; never rushed, never condescending.",
+      "Pacing: Slow and deliberate, with a distinct pause after each complete thought to let it settle.",
+      "Emotion: Steady reassurance and real interest in the subject.",
+      "Emphasis: Lean gently into the key term of each sentence.",
+    ].join("\n"),
+  },
+  {
+    label: "친근한 대화",
+    text: [
+      "Voice Affect: Relaxed and natural, like a close friend talking across a kitchen table.",
+      "Tone: Casual, warm, and unpolished — this is speech, not reading.",
+      "Pacing: Conversational and slightly uneven; speed up on throwaway phrases and slow down on the point that matters.",
+      "Emotion: Easy familiarity, with a light smile audible throughout.",
+      "Pronunciation: Relaxed and informal; let words run together the way people actually talk.",
+    ].join("\n"),
+  },
+  {
+    label: "즐겁고 들뜬",
+    text: [
+      "Voice Affect: Someone bursting to share news they are thrilled about, grinning so wide you can hear it.",
+      "Tone: Bright, warm, and giddy, always on the edge of breaking into a laugh.",
+      "Pacing: Lively and bouncy, with excited little rushes on the happiest phrases — but keep every word clearly formed.",
+      "Emotion: Unguarded joy and delight; let the voice bubble and occasionally crack upward with excitement.",
+      "Emphasis: Swing the pitch high on the exciting words and let the ends of sentences lift.",
+    ].join("\n"),
+  },
+  {
+    label: "동화 구연",
+    text: [
+      "Voice Affect: A warm storyteller reading a picture book aloud to a small child curled up beside them.",
+      "Tone: Gentle, playful, and full of wonder.",
+      "Pacing: Slow and lilting, with long, expectant pauses right before something exciting happens.",
+      "Emotion: Delight and affection; let surprise and mischief color the voice.",
+      "Emphasis: Stretch and sing the vivid, magical words.",
+    ].join("\n"),
+  },
+  {
+    label: "속삭이듯",
+    text: [
+      "Voice Affect: A soft, breathy whisper, as if sharing a secret in a quiet room where someone else is asleep.",
+      "Tone: Intimate, conspiratorial, and hushed.",
+      "Pacing: Slow and careful, the voice barely above a breath.",
+      "Emotion: Quiet urgency and closeness.",
+      "Pronunciation: Keep consonants soft; never let the voice rise into full speech.",
+    ].join("\n"),
+  },
+  {
+    label: "느와르 탐정",
+    text: [
+      "Voice Affect: Low, gravelly, and world-weary — a 1940s private detective narrating from a rain-soaked office.",
+      "Tone: Cynical, brooding, and quietly amused by how bad things have gotten.",
+      "Pacing: Slow and deliberate, with heavy pauses between thoughts, as if exhaling smoke between lines.",
+      "Emotion: Jaded detachment with a buried streak of sentiment.",
+      "Emphasis: Let the last word of each sentence drop low and linger.",
+    ].join("\n"),
+  },
+  {
+    label: "영국 신사",
+    text: [
+      "Voice Affect: A polished upper-class British gentleman speaking in refined Received Pronunciation.",
+      "Tone: Courteous, dry, and faintly amused, with impeccable composure.",
+      "Pacing: Unhurried and elegant, savoring the shape of each phrase.",
+      "Pronunciation: Crisp non-rhotic English vowels; sound every T clearly.",
+      "Emotion: Understated wit held just beneath the surface.",
+    ].join("\n"),
+  },
 ] as const;
 const MAX_INSTRUCTIONS = 1000;
 
@@ -226,8 +303,8 @@ export default function TtsClient() {
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               maxLength={MAX_INSTRUCTIONS}
-              rows={2}
-              placeholder="예: 밝고 활기차게 읽어주세요. 영어로 쓰면 더 정확하게 반영됩니다."
+              rows={5}
+              placeholder="아래 프리셋을 누르거나 직접 작성하세요. 영어로 쓰면 더 정확하게 반영됩니다."
               className="w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-2 focus:ring-blue-200"
             />
             <div className="mt-1 flex flex-wrap gap-1">
@@ -243,7 +320,9 @@ export default function TtsClient() {
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-xs text-zinc-400">톤·감정·억양·말하는 속도를 자연어로 지시할 수 있습니다.</p>
+            <p className="mt-1.5 text-xs text-zinc-400">
+              톤·감정·억양·말하는 속도를 자연어로 지시할 수 있습니다. 짧은 문장에서는 차이가 잘 드러나지 않으니 두세 문장 이상 넣어 보세요.
+            </p>
           </div>
         )}
 
