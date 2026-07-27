@@ -32,6 +32,8 @@ const MODELS = [
 // ⚠️ 본문은 openai.fm 형식의 다속성 블록(Voice Affect/Tone/Pacing/...)을 유지할 것.
 // 한 줄 요약으로 줄이면 톤 차이가 거의 들리지 않는다. 구체적 화자상이 형용사 나열보다 강하게 먹힌다.
 const INSTRUCTION_PRESETS = [
+  // 빈 문자열 = 초기 상태와 동일하므로 별도 분기 없이 하이라이트·해제가 모두 동작한다.
+  { label: "없음", text: "" },
   {
     label: "뉴스 앵커",
     text: [
