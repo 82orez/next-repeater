@@ -4,23 +4,42 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { ArrowLeft, Download, Volume2 } from "lucide-react";
+import { toast } from "sonner";
 
+// legacy: tts-1 / tts-1-hd 에서도 쓸 수 있는 음성. false면 gpt-4o-mini-tts 전용.
+// gender/accent/desc는 API가 주는 값이 아니라 청감 기준으로 직접 붙인 라벨이다.
 const VOICES = [
-  { id: "alloy", label: "Alloy", gender: "중성", accent: "미국식", desc: "중성적이고 균형 잡힌 톤" },
-  { id: "ash", label: "Ash", gender: "남성", accent: "미국식", desc: "부드럽고 차분한 톤" },
-  { id: "ballad", label: "Ballad", gender: "남성", accent: "미국식", desc: "감성적이고 표현력 있는 톤" },
-  { id: "coral", label: "Coral", gender: "여성", accent: "미국식", desc: "따뜻하고 친근한 톤" },
-  { id: "echo", label: "Echo", gender: "남성", accent: "미국식", desc: "명확하고 또렷한 톤" },
-  { id: "fable", label: "Fable", gender: "남성", accent: "영국식", desc: "이야기체의 부드러운 톤" },
-  { id: "onyx", label: "Onyx", gender: "남성", accent: "미국식", desc: "깊고 무게감 있는 톤" },
-  { id: "nova", label: "Nova", gender: "여성", accent: "미국식", desc: "밝고 활기찬 톤" },
-  { id: "sage", label: "Sage", gender: "여성", accent: "미국식", desc: "차분하고 신뢰감 있는 톤" },
-  { id: "shimmer", label: "Shimmer", gender: "여성", accent: "미국식", desc: "맑고 경쾌한 톤" },
+  { id: "alloy", label: "Alloy", gender: "중성", accent: "미국식", desc: "중성적이고 균형 잡힌 톤", legacy: true, recommended: false },
+  { id: "ash", label: "Ash", gender: "남성", accent: "미국식", desc: "부드럽고 차분한 톤", legacy: true, recommended: false },
+  { id: "ballad", label: "Ballad", gender: "남성", accent: "미국식", desc: "감성적이고 표현력 있는 톤", legacy: false, recommended: false },
+  { id: "coral", label: "Coral", gender: "여성", accent: "미국식", desc: "따뜻하고 친근한 톤", legacy: true, recommended: false },
+  { id: "echo", label: "Echo", gender: "남성", accent: "미국식", desc: "명확하고 또렷한 톤", legacy: true, recommended: false },
+  { id: "fable", label: "Fable", gender: "남성", accent: "영국식", desc: "이야기체의 부드러운 톤", legacy: true, recommended: false },
+  { id: "onyx", label: "Onyx", gender: "남성", accent: "미국식", desc: "깊고 무게감 있는 톤", legacy: true, recommended: false },
+  { id: "nova", label: "Nova", gender: "여성", accent: "미국식", desc: "밝고 활기찬 톤", legacy: true, recommended: false },
+  { id: "sage", label: "Sage", gender: "여성", accent: "미국식", desc: "차분하고 신뢰감 있는 톤", legacy: true, recommended: false },
+  { id: "shimmer", label: "Shimmer", gender: "여성", accent: "미국식", desc: "맑고 경쾌한 톤", legacy: true, recommended: false },
+  { id: "verse", label: "Verse", gender: "남성", accent: "미국식", desc: "생동감 있고 표현력 넓은 톤", legacy: false, recommended: false },
+  { id: "marin", label: "Marin", gender: "여성", accent: "미국식", desc: "자연스럽고 또렷한 최신 음성", legacy: false, recommended: true },
+  { id: "cedar", label: "Cedar", gender: "남성", accent: "미국식", desc: "자연스럽고 안정적인 최신 음성", legacy: false, recommended: true },
 ] as const;
 const MODELS = [
-  { id: "tts-1", label: "표준 (tts-1)" },
-  { id: "tts-1-hd", label: "고품질 (tts-1-hd)" },
+  { id: "gpt-4o-mini-tts", label: "최신 (gpt-4o-mini-tts)", instructable: true },
+  { id: "tts-1", label: "표준 (tts-1)", instructable: false },
+  { id: "tts-1-hd", label: "고품질 (tts-1-hd)", instructable: false },
 ] as const;
+// 라벨은 한국어, 본문은 영어 — 모델이 영어 지시를 더 안정적으로 따른다.
+const INSTRUCTION_PRESETS = [
+  { label: "밝고 활기차게", text: "Speak in a bright, upbeat and energetic tone." },
+  { label: "차분하고 느리게", text: "Speak in a calm, gentle voice at a slow, relaxed pace." },
+  { label: "뉴스 앵커처럼", text: "Speak like a professional news anchor: clear, neutral and authoritative." },
+  { label: "속삭이듯", text: "Speak in a soft, intimate whisper." },
+  { label: "동화 구연", text: "Speak like a warm storyteller reading a children's book, with playful expression." },
+] as const;
+const MAX_INSTRUCTIONS = 1000;
+
+const isInstructable = (modelId: string) => MODELS.find((m) => m.id === modelId)?.instructable ?? false;
+const isVoiceAllowed = (modelId: string, voice: (typeof VOICES)[number]) => isInstructable(modelId) || voice.legacy;
 const FORMATS = [
   { id: "mp3", label: "MP3" },
   { id: "opus", label: "Opus" },
@@ -33,10 +52,11 @@ const SPEED_PRESETS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 export default function TtsClient() {
   const [text, setText] = useState("");
-  const [model, setModel] = useState<string>("tts-1");
+  const [model, setModel] = useState<string>("gpt-4o-mini-tts");
   const [voice, setVoice] = useState<string>("alloy");
   const [format, setFormat] = useState<string>("mp3");
   const [speed, setSpeed] = useState(1.0);
+  const [instructions, setInstructions] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -54,6 +74,16 @@ export default function TtsClient() {
     return () => revokeAudio();
   }, []);
 
+  // 모델을 바꾸면 현재 음성이 지원 밖일 수 있다 — 조용히 실패시키지 않고 alloy로 되돌린다.
+  const onModelChange = (nextModel: string) => {
+    setModel(nextModel);
+    const current = VOICES.find((v) => v.id === voice);
+    if (current && !isVoiceAllowed(nextModel, current)) {
+      setVoice("alloy");
+      toast.info(`${current.label} 음성은 최신 모델 전용이라 Alloy로 변경했습니다.`);
+    }
+  };
+
   const onGenerate = async () => {
     if (!text.trim() || isLoading) return;
     if (!window.confirm("해당 텍스트로 음성을 생성하시겠습니까? OpenAI API가 호출되고 token이 소모됩니다.")) return;
@@ -67,7 +97,14 @@ export default function TtsClient() {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: text, model, voice, response_format: format, speed }),
+        body: JSON.stringify({
+          input: text,
+          model,
+          voice,
+          response_format: format,
+          speed,
+          ...(isInstructable(model) && instructions.trim() ? { instructions: instructions.trim() } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -120,7 +157,7 @@ export default function TtsClient() {
             {MODELS.map((m) => (
               <button
                 key={m.id}
-                onClick={() => setModel(m.id)}
+                onClick={() => onModelChange(m.id)}
                 className={clsx(
                   "rounded-xl border px-3 py-1.5 text-sm font-medium transition-colors",
                   model === m.id ? "border-blue-600 bg-blue-50 text-blue-700" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-100",
@@ -135,40 +172,80 @@ export default function TtsClient() {
         <div className="mb-4">
           <label className="mb-1.5 block text-sm font-medium text-zinc-700">음성</label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {VOICES.map((v) => (
-              <button
-                key={v.id}
-                onClick={() => setVoice(v.id)}
-                className={clsx(
-                  "rounded-xl border px-3 py-2 text-left transition-colors",
-                  voice === v.id ? "border-blue-600 bg-blue-50" : "border-zinc-200 bg-white hover:bg-zinc-100",
-                )}>
-                <div className={clsx("text-sm font-medium", voice === v.id ? "text-blue-700" : "text-zinc-700")}>{v.label}</div>
-                <div className="mt-0.5 flex gap-1">
-                  <span
-                    className={clsx(
-                      "rounded px-1 py-0.5 text-[10px] font-medium",
-                      v.gender === "남성"
-                        ? "bg-blue-100 text-blue-700"
-                        : v.gender === "여성"
-                          ? "bg-rose-100 text-rose-700"
-                          : "bg-zinc-100 text-zinc-600",
-                    )}>
-                    {v.gender}
-                  </span>
-                  <span
-                    className={clsx(
-                      "rounded px-1 py-0.5 text-[10px] font-medium",
-                      v.accent === "영국식" ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700",
-                    )}>
-                    {v.accent}
-                  </span>
-                </div>
-                <div className={clsx("mt-0.5 text-xs", voice === v.id ? "text-blue-500" : "text-zinc-400")}>{v.desc}</div>
-              </button>
-            ))}
+            {VOICES.map((v) => {
+              const allowed = isVoiceAllowed(model, v);
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setVoice(v.id)}
+                  disabled={!allowed}
+                  title={allowed ? undefined : "최신 모델(gpt-4o-mini-tts) 전용 음성입니다."}
+                  className={clsx(
+                    "rounded-xl border px-3 py-2 text-left transition-colors",
+                    !allowed
+                      ? "border-zinc-200 bg-zinc-100 opacity-50"
+                      : voice === v.id
+                        ? "border-blue-600 bg-blue-50"
+                        : "border-zinc-200 bg-white hover:bg-zinc-100",
+                  )}>
+                  <div className={clsx("text-sm font-medium", voice === v.id && allowed ? "text-blue-700" : "text-zinc-700")}>{v.label}</div>
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    <span
+                      className={clsx(
+                        "rounded px-1 py-0.5 text-[10px] font-medium",
+                        v.gender === "남성"
+                          ? "bg-blue-100 text-blue-700"
+                          : v.gender === "여성"
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-zinc-100 text-zinc-600",
+                      )}>
+                      {v.gender}
+                    </span>
+                    <span
+                      className={clsx(
+                        "rounded px-1 py-0.5 text-[10px] font-medium",
+                        v.accent === "영국식" ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700",
+                      )}>
+                      {v.accent}
+                    </span>
+                    {v.recommended && <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-700">추천</span>}
+                  </div>
+                  <div className={clsx("mt-0.5 text-xs", voice === v.id && allowed ? "text-blue-500" : "text-zinc-400")}>{v.desc}</div>
+                </button>
+              );
+            })}
           </div>
+          {!isInstructable(model) && <p className="mt-1.5 text-xs text-zinc-400">흐린 음성은 최신 모델(gpt-4o-mini-tts)에서만 사용할 수 있습니다.</p>}
         </div>
+
+        {/* 톤 지시 — gpt-4o-mini-tts 전용 */}
+        {isInstructable(model) && (
+          <div className="mb-4">
+            <label className="mb-1.5 block text-sm font-medium text-zinc-700">톤 지시 (선택)</label>
+            <textarea
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              maxLength={MAX_INSTRUCTIONS}
+              rows={2}
+              placeholder="예: 밝고 활기차게 읽어주세요. 영어로 쓰면 더 정확하게 반영됩니다."
+              className="w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-2 focus:ring-blue-200"
+            />
+            <div className="mt-1 flex flex-wrap gap-1">
+              {INSTRUCTION_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  onClick={() => setInstructions(p.text)}
+                  className={clsx(
+                    "rounded-lg border px-2 py-0.5 text-xs font-medium transition-colors",
+                    instructions === p.text ? "border-blue-600 bg-blue-50 text-blue-700" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-100",
+                  )}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-zinc-400">톤·감정·억양·말하는 속도를 자연어로 지시할 수 있습니다.</p>
+          </div>
+        )}
 
         {/* 포맷 & 속도 */}
         <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
