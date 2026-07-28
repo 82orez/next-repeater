@@ -13,7 +13,7 @@ const VOICES = [
   { id: "alloy", label: "Alloy", gender: "중성", accent: "미국식", desc: "중성적이고 균형 잡힌 톤", legacy: true, recommended: false },
   { id: "ash", label: "Ash", gender: "남성", accent: "미국식", desc: "거칠고 낮은 톤", legacy: true, recommended: false },
   { id: "ballad", label: "Ballad", gender: "남성", accent: "미국식", desc: "감성적이고 표현력 있는 톤", legacy: false, recommended: false },
-  { id: "coral", label: "Coral", gender: "여성", accent: "미국식", desc: "따뜻하고 친근한 톤", legacy: true, recommended: false },
+  { id: "coral", label: "Coral", gender: "여성", accent: "미국식", desc: "경계하는 톤", legacy: true, recommended: false },
   { id: "echo", label: "Echo", gender: "남성", accent: "미국식", desc: "명확하고 또렷한 톤", legacy: true, recommended: false },
   { id: "fable", label: "Fable", gender: "남성", accent: "영국식", desc: "이야기체의 부드러운 톤", legacy: true, recommended: false },
   { id: "onyx", label: "Onyx", gender: "남성", accent: "미국식", desc: "깊고 무게감 있는 톤", legacy: true, recommended: false },
