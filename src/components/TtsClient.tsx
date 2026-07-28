@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { ArrowLeft, Download, Volume2 } from "lucide-react";
 import { toast } from "sonner";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 // legacy: tts-1 / tts-1-hd 에서도 쓸 수 있는 음성. false면 gpt-4o-mini-tts 전용.
 // gender/accent/desc는 API가 주는 값이 아니라 청감 기준으로 직접 붙인 라벨이다.
@@ -139,6 +140,7 @@ export default function TtsClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const audioUrlRef = useRef<string | null>(null);
 
@@ -163,9 +165,14 @@ export default function TtsClient() {
     }
   };
 
-  const onGenerate = async () => {
+  const requestGenerate = () => {
     if (!text.trim() || isLoading) return;
-    if (!window.confirm("해당 텍스트로 음성을 생성하시겠습니까? OpenAI API가 호출되고 token이 소모됩니다.")) return;
+    setConfirmOpen(true);
+  };
+
+  const onGenerate = async () => {
+    setConfirmOpen(false);
+    if (!text.trim() || isLoading) return;
 
     setIsLoading(true);
     setError(null);
@@ -373,7 +380,7 @@ export default function TtsClient() {
 
         {/* 생성 버튼 */}
         <button
-          onClick={onGenerate}
+          onClick={requestGenerate}
           disabled={!text.trim() || isLoading}
           className={clsx(
             "flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition-colors",
@@ -410,6 +417,15 @@ export default function TtsClient() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="음성을 생성할까요?"
+        description="OpenAI API가 호출되고 token이 소모됩니다."
+        confirmLabel="생성"
+        onConfirm={onGenerate}
+        onCancel={() => setConfirmOpen(false)}
+      />
 
       <footer className="mt-8 text-center text-xs text-zinc-500">OpenAI TTS API — 텍스트 음성 변환</footer>
     </div>

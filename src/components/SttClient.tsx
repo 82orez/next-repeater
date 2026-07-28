@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { ArrowLeft, Copy, Download, FileText, Upload } from "lucide-react";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 const MODELS = [
   { id: "gpt-4o-transcribe", label: "고품질 (gpt-4o-transcribe)" },
@@ -25,6 +26,7 @@ export default function SttClient() {
   const [error, setError] = useState<string | null>(null);
   const [resultText, setResultText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const txtUrlRef = useRef<string | null>(null);
@@ -56,9 +58,14 @@ export default function SttClient() {
     setFile(f);
   };
 
-  const onExtract = async () => {
+  const requestExtract = () => {
     if (!file || isLoading) return;
-    if (!window.confirm("해당 파일에서 텍스트를 추출하시겠습니까? OpenAI API가 호출되고 token이 소모됩니다.")) return;
+    setConfirmOpen(true);
+  };
+
+  const onExtract = async () => {
+    setConfirmOpen(false);
+    if (!file || isLoading) return;
 
     setIsLoading(true);
     setError(null);
@@ -162,7 +169,7 @@ export default function SttClient() {
 
         {/* 추출 버튼 */}
         <button
-          onClick={onExtract}
+          onClick={requestExtract}
           disabled={!file || isLoading}
           className={clsx(
             "flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition-colors",
@@ -213,6 +220,15 @@ export default function SttClient() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="텍스트를 추출할까요?"
+        description="OpenAI API가 호출되고 token이 소모됩니다."
+        confirmLabel="추출"
+        onConfirm={onExtract}
+        onCancel={() => setConfirmOpen(false)}
+      />
 
       <footer className="mt-8 text-center text-xs text-zinc-500">OpenAI 음성 인식 API — 음성 텍스트 추출</footer>
     </div>
