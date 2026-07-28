@@ -62,6 +62,8 @@ import { TbRepeatOff } from "react-icons/tb";
 export default function Player() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  // 트랙 로드 순번 — 늦게 시작한 요청이 먼저 끝나 이전 트랙이 적용되는 것을 막는다
+  const loadSeqRef = useRef(0);
   const mediaRef = useRef<HTMLVideoElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -184,11 +186,20 @@ export default function Player() {
   // ✅ 미디어 1개 + 딸린 자막을 검증 후 로드. 단일 파일 선택과 재생목록 전환이 공유한다.
   //    성공하면 true, 가드에 걸리면 false를 반환(재생목록 인덱스는 성공 시에만 옮기기 위함).
   const loadTrack = (file: File, subFiles: File[]): Promise<boolean> => {
+    // ⚠️ 순번 가드: 프로브·자막 파싱이 비동기라 트랙을 빠르게 연속 클릭하면 늦게 시작한 요청이
+    //    먼저 끝날 수 있다. 최신 호출이 아니면 부수효과(setSource/addSubs)를 적용하지 않는다.
+    const seq = ++loadSeqRef.current;
+    const isStale = () => seq !== loadSeqRef.current;
+
     // ⚠️ setSource가 subs를 비우므로 자막은 반드시 acceptFile "이후"에 붙인다
     const acceptWithSubs = async () => {
+      if (isStale()) return false;
       acceptFile(file);
       const tracks = await readSubtitleFiles(subFiles);
+      // 자막을 읽는 동안 다른 트랙이 선택됐다면 그 트랙 자막을 덮어쓰면 안 된다
+      if (isStale()) return false;
       if (tracks.length > 0) addSubs(tracks);
+      return true;
     };
 
     // ✅ 용량 차단(선택 즉시 판정 가능)
@@ -214,17 +225,18 @@ export default function Player() {
         cleanupProbe();
         // Infinity/NaN(일부 포맷)은 판정 불가 → 통과시켜 기존 흐름에 위임
         if (isFinite(dur) && dur > MAX_UPLOAD_SEC) {
-          toast.warning("재생시간이 90분을 초과해 업로드할 수 없습니다. 브라우저 메모리 보호를 위한 제한이에요.");
+          // 이미 밀려난 요청이면 경고도 띄우지 않는다(버려진 파일에 대한 소음)
+          if (!isStale()) toast.warning("재생시간이 90분을 초과해 업로드할 수 없습니다. 브라우저 메모리 보호를 위한 제한이에요.");
           resolve(false);
           return;
         }
-        acceptWithSubs().then(() => resolve(true));
+        acceptWithSubs().then(resolve);
       };
 
       probe.onerror = () => {
         cleanupProbe();
         // metadata를 못 읽어도 여기서 막지 않고 로드 → 기존 에러 처리에 위임
-        acceptWithSubs().then(() => resolve(true));
+        acceptWithSubs().then(resolve);
       };
 
       probe.src = probeUrl;
