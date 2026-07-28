@@ -1,13 +1,16 @@
 # CLAUDE.md
 
 ## 명령어
+
 - `npm run dev` — 개발 서버 (localhost:3000)
 - `npm run build` / `npm run start` — 프로덕션 빌드 / 실행
 - `npx tsc --noEmit` — 타입 검사 (`strict:false`, `noImplicitAny:false`)
 - lint/test 스크립트 없음 — 만들지 마세요.
 
 ## 아키텍처
+
 Next.js 16 App Router. 페이지 3개:
+
 - **`/`** → `<Player />` (`src/app/page.tsx`): 오디오/비디오 A–B 반복 재생기.
 - **`/tts`** → `<TtsClient />` (`src/app/tts/page.tsx`): OpenAI TTS로 텍스트→음성 변환·다운로드.
 - **`/stt`** → `<SttClient />` (`src/app/stt/page.tsx`): OpenAI Whisper/gpt-4o-transcribe로 음성 파일→텍스트 추출.
@@ -45,6 +48,7 @@ Next.js 16 App Router. 페이지 3개:
 - **STT**(`SttClient.tsx`)는 TTS와 대칭 구조(독립·`useState`만·`window.confirm`). API 라우트(`src/app/api/stt/route.ts`)가 `request.formData()`로 파일 받아 OpenAI `audio.transcriptions`(`response_format:"text"`) 프록시, 키 동일 재사용. 모델 화이트리스트 `gpt-4o-transcribe`/`whisper-1`(기본·가운데)/`gpt-4o-mini-transcribe`. **25MB 제한**(서버+클라이언트 이중 가드). 결과는 textarea+복사+`.txt` 다운로드. `Player.tsx` 헤더에 STT/TTS 링크.
 
 ## 컨벤션
+
 - 별칭 `@/*`→`./src/*`. `strict:false`/`noImplicitAny:false` 유지 — 문의 없이 강화 금지.
 - Prettier: 큰따옴표, `tabWidth:2`, `printWidth:150`, `trailingComma:"all"`, **`endOfLine:"lf"`**, **`bracketSameLine:true`**(JSX 여는 태그의 `>`는 마지막 속성과 같은 줄), `prettier-plugin-tailwindcss`. 리포지토리는 전부 LF이고 `core.autocrlf=input`이라 커밋 시에도 LF로 정규화된다 — CRLF로 저장하지 말 것.
 - Tailwind v4(`@tailwindcss/postcss`), CSS는 `src/app/globals.css`(`@import "tailwindcss";`+range 슬라이더 커스텀).
