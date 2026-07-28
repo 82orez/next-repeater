@@ -120,6 +120,31 @@ const MAX_INSTRUCTIONS = 1000;
 
 const isInstructable = (modelId: string) => MODELS.find((m) => m.id === modelId)?.instructable ?? false;
 const isVoiceAllowed = (modelId: string, voice: (typeof VOICES)[number]) => isInstructable(modelId) || voice.legacy;
+
+// 생성 시점 설정 스냅샷 — 결과 카드는 반드시 이것만 읽는다(현재 state를 읽으면 생성 후 선택을 바꿨을 때 어긋난다)
+type GenMeta = {
+  modelLabel: string;
+  voice: (typeof VOICES)[number];
+  tone: string | null; // null = 이 모델은 톤 지시를 지원하지 않음 → 행 자체를 숨긴다
+  speed: number;
+  format: string;
+};
+
+// instructions 문자열 → 사람이 읽는 라벨. 빈 문자열 프리셋("없음")이 있어 그 경우도 여기서 잡힌다.
+const toneLabelOf = (modelId: string, instructions: string): string | null => {
+  if (!isInstructable(modelId)) return null;
+  const preset = INSTRUCTION_PRESETS.find((p) => p.text === instructions);
+  if (preset) return preset.label;
+  return instructions.trim() ? "직접 입력" : "없음";
+};
+
+const buildMeta = (modelId: string, voiceId: string, instructions: string, speed: number, format: string): GenMeta => ({
+  modelLabel: MODELS.find((m) => m.id === modelId)?.label ?? modelId,
+  voice: VOICES.find((v) => v.id === voiceId) ?? VOICES[0],
+  tone: toneLabelOf(modelId, instructions),
+  speed,
+  format,
+});
 const FORMATS = [
   { id: "mp3", label: "MP3" },
   { id: "opus", label: "Opus" },
@@ -129,6 +154,57 @@ const FORMATS = [
   { id: "pcm", label: "PCM" },
 ] as const;
 const SPEED_PRESETS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+// 보이스 카드의 성별·억양 뱃지와 같은 스타일 — 확인창/결과 카드에서 시각적으로 이어지게 재사용한다
+function VoiceBadges({ voice }: { voice: (typeof VOICES)[number] }) {
+  return (
+    <>
+      <span
+        className={clsx(
+          "rounded px-1 py-0.5 text-[10px] font-medium",
+          voice.gender === "남성" ? "bg-blue-100 text-blue-700" : voice.gender === "여성" ? "bg-rose-100 text-rose-700" : "bg-zinc-100 text-zinc-600",
+        )}>
+        {voice.gender}
+      </span>
+      <span
+        className={clsx(
+          "rounded px-1 py-0.5 text-[10px] font-medium",
+          voice.accent === "영국식" ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700",
+        )}>
+        {voice.accent}
+      </span>
+    </>
+  );
+}
+
+// 확인창용 설정 요약 — 라벨/값 2열
+function GenSummary({ meta }: { meta: GenMeta }) {
+  return (
+    <>
+      <p>OpenAI API가 호출되고 token이 소모됩니다.</p>
+      <dl className="mt-3 space-y-1.5 rounded-xl bg-zinc-50 px-3 py-2.5">
+        <div className="flex items-center gap-3">
+          <dt className="w-10 shrink-0 text-xs text-zinc-500">모델</dt>
+          <dd className="text-sm text-zinc-800">{meta.modelLabel}</dd>
+        </div>
+        <div className="flex items-center gap-3">
+          <dt className="w-10 shrink-0 text-xs text-zinc-500">음성</dt>
+          <dd className="flex items-center gap-1.5 text-sm text-zinc-800">
+            {meta.voice.label}
+            <VoiceBadges voice={meta.voice} />
+          </dd>
+        </div>
+        {/* tts-1 계열은 톤 지시를 전송하지 않으므로 행 자체를 숨긴다 */}
+        {meta.tone && (
+          <div className="flex items-center gap-3">
+            <dt className="w-10 shrink-0 text-xs text-zinc-500">톤</dt>
+            <dd className="text-sm text-zinc-800">{meta.tone}</dd>
+          </div>
+        )}
+      </dl>
+    </>
+  );
+}
 
 export default function TtsClient() {
   const [text, setText] = useState("");
@@ -141,6 +217,7 @@ export default function TtsClient() {
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [resultMeta, setResultMeta] = useState<GenMeta | null>(null);
 
   const audioUrlRef = useRef<string | null>(null);
 
@@ -178,6 +255,7 @@ export default function TtsClient() {
     setError(null);
     revokeAudio();
     setAudioUrl(null);
+    setResultMeta(null); // 실패 시 이전 결과 정보가 남지 않도록
 
     try {
       const res = await fetch("/api/tts", {
@@ -202,6 +280,8 @@ export default function TtsClient() {
       const url = URL.createObjectURL(blob);
       audioUrlRef.current = url;
       setAudioUrl(url);
+      // 이 시점의 설정을 고정 — 이후 선택을 바꿔도 결과 카드는 실제 생성값을 유지한다
+      setResultMeta(buildMeta(model, voice, instructions, speed, format));
     } catch (e: any) {
       setError(e.message || "음성 생성 중 오류가 발생했습니다.");
     } finally {
@@ -405,11 +485,31 @@ export default function TtsClient() {
         {/* 결과 */}
         {audioUrl && (
           <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4">
-            <p className="mb-3 text-sm font-medium text-zinc-700">생성된 음성</p>
+            <p className="text-sm font-medium text-zinc-700">생성된 음성</p>
+            {/* ⚠️ 현재 state가 아니라 생성 시점 스냅샷을 읽는다 */}
+            {resultMeta && (
+              <div className="mt-1.5 mb-3">
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-zinc-700">
+                  <span>{resultMeta.modelLabel}</span>
+                  <span className="text-zinc-300">·</span>
+                  <span>{resultMeta.voice.label}</span>
+                  <VoiceBadges voice={resultMeta.voice} />
+                  {resultMeta.tone && (
+                    <>
+                      <span className="text-zinc-300">·</span>
+                      <span>톤 {resultMeta.tone}</span>
+                    </>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs text-zinc-500">
+                  {resultMeta.speed.toFixed(2)}x · {resultMeta.format.toUpperCase()}
+                </div>
+              </div>
+            )}
             <audio controls src={audioUrl} className="mb-3 w-full" />
             <a
               href={audioUrl}
-              download={`tts-output.${format}`}
+              download={`tts-output.${resultMeta?.format ?? format}`}
               className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
               <Download className="h-4 w-4" />
               다운로드
@@ -421,7 +521,7 @@ export default function TtsClient() {
       <ConfirmDialog
         open={confirmOpen}
         title="음성을 생성할까요?"
-        description="OpenAI API가 호출되고 token이 소모됩니다."
+        description={<GenSummary meta={buildMeta(model, voice, instructions, speed, format)} />}
         confirmLabel="생성"
         onConfirm={onGenerate}
         onCancel={() => setConfirmOpen(false)}

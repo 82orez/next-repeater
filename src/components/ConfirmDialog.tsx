@@ -3,12 +3,13 @@
 // ✅ window.confirm 대체용 확인 모달.
 //    네이티브 <dialog>의 showModal()을 쓰므로 포커스 트랩·Esc 닫기·배경 처리를 브라우저가 담당한다
 //    (직접 만들면 접근성 처리를 다시 짜야 한다).
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 type Props = {
   open: boolean;
   title: string;
-  description?: string;
+  // 문자열 외에 구조화된 내용(설정 요약 등)도 넘길 수 있다
+  description?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
@@ -40,7 +41,8 @@ export default function ConfirmDialog({ open, title, description, confirmLabel =
       className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-2xl border border-zinc-200 bg-white p-0 shadow-xl backdrop:bg-zinc-900/40">
       <div className="p-5">
         <h2 className="text-base font-semibold text-zinc-900">{title}</h2>
-        {description && <p className="mt-2 text-sm leading-relaxed text-zinc-600">{description}</p>}
+        {/* ReactNode를 받으므로 <p>가 아니라 <div> — 내부에 블록 요소가 와도 유효한 마크업이 된다 */}
+        {description && <div className="mt-2 text-sm leading-relaxed text-zinc-600">{description}</div>}
 
         <div className="mt-5 flex justify-end gap-2">
           <button
