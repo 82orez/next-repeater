@@ -11,7 +11,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 // gender/accent/desc는 API가 주는 값이 아니라 청감 기준으로 직접 붙인 라벨이다.
 const VOICES = [
   { id: "alloy", label: "Alloy", gender: "중성", accent: "미국식", desc: "중성적이고 균형 잡힌 톤", legacy: true, recommended: false },
-  { id: "ash", label: "Ash", gender: "남성", accent: "미국식", desc: "부드럽고 차분한 톤", legacy: true, recommended: false },
+  { id: "ash", label: "Ash", gender: "남성", accent: "미국식", desc: "거칠고 낮은 톤", legacy: true, recommended: false },
   { id: "ballad", label: "Ballad", gender: "남성", accent: "미국식", desc: "감성적이고 표현력 있는 톤", legacy: false, recommended: false },
   { id: "coral", label: "Coral", gender: "여성", accent: "미국식", desc: "따뜻하고 친근한 톤", legacy: true, recommended: false },
   { id: "echo", label: "Echo", gender: "남성", accent: "미국식", desc: "명확하고 또렷한 톤", legacy: true, recommended: false },
