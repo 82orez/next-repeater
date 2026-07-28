@@ -680,10 +680,14 @@ export default function Player() {
               <button
                 onClick={extractRegion}
                 disabled={!canLoop || controlsDisabled || extracting}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-w-[6.5rem] items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
                 title="선택한 A/B 구간을 MP3 파일로 저장">
-                {extracting ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" /> : <Download className="h-4 w-4" />}
-                구간 추출
+                {extracting ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {extracting ? "추출 중" : "구간 추출"}
               </button>
               <select
                 value={mp3Kbps}
