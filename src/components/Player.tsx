@@ -17,14 +17,17 @@ import {
   ArrowRightFromLine,
   Download,
   FileText,
+  FolderOpen,
+  SkipBack,
+  SkipForward,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import Waveform from "@/components/Waveform";
 import MediaView from "@/components/MediaView";
-import BookmarkPanel from "@/components/BookmarkPanel";
 import Recorder from "@/components/Recorder";
 import CaptionPanel from "@/components/CaptionPanel";
+import PlaylistPanel from "@/components/PlaylistPanel";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
 import { extractRegionToMp3 } from "@/lib/audioExport";
@@ -41,11 +44,24 @@ const MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024;
 
 // 자막은 텍스트라 훨씬 작다(1시간 분량이 ~80KB) — 오선택 방지용 상한
 const MAX_SUB_BYTES = 5 * 1024 * 1024;
+
+// 폴더 스캔용: file.type이 비어 있는 경우가 많아 확장자로도 판정한다
+const MEDIA_EXT_RE = /\.(mp3|m4a|aac|wav|ogg|opus|flac|mp4|m4v|mov|webm|mkv)$/i;
+
+// 001.mp3 ↔ 001.srt / 001.en.srt / 001.ko.vtt 를 파일명으로 짝지어 준다
+const matchSubFiles = (mediaName: string, subFiles: File[]): File[] => {
+  const base = mediaName.replace(/\.[^.]+$/, "");
+  return subFiles.filter((s) => {
+    const sBase = s.name.replace(SUB_EXT_RE, "");
+    return sBase === base || sBase.startsWith(`${base}.`);
+  });
+};
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { TbRepeatOff } from "react-icons/tb";
 
 export default function Player() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRef = useRef<HTMLVideoElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -75,7 +91,7 @@ export default function Player() {
   const repeatTarget = usePlayerStore((s) => s.repeatTarget);
   const repeatCount = usePlayerStore((s) => s.repeatCount);
 
-  const bookmarks = usePlayerStore((s) => s.bookmarks);
+  const subs = usePlayerStore((s) => s.subs);
 
   const setSource = usePlayerStore((s) => s.setSource);
   const setPlaybackRate = usePlayerStore((s) => s.setPlaybackRate);
@@ -98,7 +114,14 @@ export default function Player() {
 
   const addSubs = usePlayerStore((s) => s.addSubs);
 
+  const playlist = usePlayerStore((s) => s.playlist);
+  const playlistIndex = usePlayerStore((s) => s.playlistIndex);
+  const setPlaylist = usePlayerStore((s) => s.setPlaylist);
+  const setPlaylistIndex = usePlayerStore((s) => s.setPlaylistIndex);
+  const clearPlaylist = usePlayerStore((s) => s.clearPlaylist);
+
   const onPickFile = () => fileInputRef.current?.click();
+  const onPickFolder = () => folderInputRef.current?.click();
 
   // ✅ 실제 로드(검증 통과한 파일만): 기존 흐름 유지
   const acceptFile = (f: File) => {
@@ -158,6 +181,56 @@ export default function Player() {
     return tracks;
   };
 
+  // ✅ 미디어 1개 + 딸린 자막을 검증 후 로드. 단일 파일 선택과 재생목록 전환이 공유한다.
+  //    성공하면 true, 가드에 걸리면 false를 반환(재생목록 인덱스는 성공 시에만 옮기기 위함).
+  const loadTrack = (file: File, subFiles: File[]): Promise<boolean> => {
+    // ⚠️ setSource가 subs를 비우므로 자막은 반드시 acceptFile "이후"에 붙인다
+    const acceptWithSubs = async () => {
+      acceptFile(file);
+      const tracks = await readSubtitleFiles(subFiles);
+      if (tracks.length > 0) addSubs(tracks);
+    };
+
+    // ✅ 용량 차단(선택 즉시 판정 가능)
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.warning("이 파일은 1GB를 초과해 업로드할 수 없습니다. 브라우저 메모리 보호를 위한 제한이에요.");
+      return Promise.resolve(false);
+    }
+
+    // ✅ 재생시간 차단: metadata만 가볍게 로드해 duration 확인(전체 디코드 아님 → OOM 위험 없음)
+    return new Promise<boolean>((resolve) => {
+      const probeUrl = URL.createObjectURL(file);
+      const probe = document.createElement("video");
+      probe.preload = "metadata";
+
+      const cleanupProbe = () => {
+        probe.onloadedmetadata = null;
+        probe.onerror = null;
+        URL.revokeObjectURL(probeUrl);
+      };
+
+      probe.onloadedmetadata = () => {
+        const dur = probe.duration;
+        cleanupProbe();
+        // Infinity/NaN(일부 포맷)은 판정 불가 → 통과시켜 기존 흐름에 위임
+        if (isFinite(dur) && dur > MAX_UPLOAD_SEC) {
+          toast.warning("재생시간이 90분을 초과해 업로드할 수 없습니다. 브라우저 메모리 보호를 위한 제한이에요.");
+          resolve(false);
+          return;
+        }
+        acceptWithSubs().then(() => resolve(true));
+      };
+
+      probe.onerror = () => {
+        cleanupProbe();
+        // metadata를 못 읽어도 여기서 막지 않고 로드 → 기존 에러 처리에 위임
+        acceptWithSubs().then(() => resolve(true));
+      };
+
+      probe.src = probeUrl;
+    });
+  };
+
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
     if (picked.length === 0) return;
@@ -175,12 +248,10 @@ export default function Player() {
       toast.warning("미디어 파일은 한 번에 하나만 열 수 있습니다. 첫 번째 파일만 불러옵니다.");
     }
 
-    // 자막은 먼저 파싱해 두고, 장착은 acceptFile 이후에 한다(아래 ⚠️ 참고)
-    const tracks = await readSubtitleFiles(subFiles);
-
     const f = mediaFiles[0];
     if (!f) {
       // 자막만 고른 경우 = 재생 중 자막 추가 → 미디어는 건드리지 않는다
+      const tracks = await readSubtitleFiles(subFiles);
       if (tracks.length > 0) {
         addSubs(tracks);
         toast.success(`자막 ${tracks.length}개를 불러왔습니다.`);
@@ -189,49 +260,62 @@ export default function Player() {
       return;
     }
 
-    // ⚠️ setSource가 subs를 비우므로 자막은 반드시 acceptFile "이후"에 붙인다
-    const acceptWithSubs = (file: File) => {
-      acceptFile(file);
-      if (tracks.length > 0) addSubs(tracks);
-    };
+    // 단일 파일을 새로 열면 재생목록과 어긋나므로 목록을 비운다
+    clearPlaylist();
+    await loadTrack(f, subFiles);
+    resetInput();
+  };
 
-    // ✅ 용량 차단(선택 즉시 판정 가능)
-    if (f.size > MAX_UPLOAD_BYTES) {
-      toast.warning("이 파일은 1GB를 초과해 업로드할 수 없습니다. 브라우저 메모리 보호를 위한 제한이에요.");
+  // ✅ 폴더 불러오기 → 재생목록 구성. blob URL은 여기서 만들지 않는다(선택 시 acceptFile이 1개만 생성).
+  const onFolderChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    const resetInput = () => {
+      if (folderInputRef.current) folderInputRef.current.value = "";
+    };
+    if (picked.length === 0) {
       resetInput();
       return;
     }
 
-    // ✅ 재생시간 차단: metadata만 가볍게 로드해 duration 확인(전체 디코드 아님 → OOM 위험 없음)
-    const probeUrl = URL.createObjectURL(f);
-    const probe = document.createElement("video");
-    probe.preload = "metadata";
+    const subFiles = picked.filter((f) => SUB_EXT_RE.test(f.name));
+    // 폴더엔 .DS_Store·이미지 등이 섞이므로 MIME 또는 확장자로 미디어만 추린다
+    const mediaFiles = picked.filter((f) => !SUB_EXT_RE.test(f.name) && (/^(audio|video)\//.test(f.type) || MEDIA_EXT_RE.test(f.name)));
 
-    const cleanupProbe = () => {
-      probe.onloadedmetadata = null;
-      probe.onerror = null;
-      URL.revokeObjectURL(probeUrl);
-    };
+    const tooBig = mediaFiles.filter((f) => f.size > MAX_UPLOAD_BYTES).length;
+    const usable = mediaFiles.filter((f) => f.size <= MAX_UPLOAD_BYTES);
 
-    probe.onloadedmetadata = () => {
-      const dur = probe.duration;
-      cleanupProbe();
-      // Infinity/NaN(일부 포맷)은 판정 불가 → 통과시켜 기존 흐름에 위임
-      if (isFinite(dur) && dur > MAX_UPLOAD_SEC) {
-        toast.warning("재생시간이 90분을 초과해 업로드할 수 없습니다. 브라우저 메모리 보호를 위한 제한이에요.");
-        resetInput();
-        return;
-      }
-      acceptWithSubs(f);
-    };
+    if (usable.length === 0) {
+      toast.warning("이 폴더에서 불러올 수 있는 미디어 파일을 찾지 못했습니다.");
+      resetInput();
+      return;
+    }
 
-    probe.onerror = () => {
-      cleanupProbe();
-      // metadata를 못 읽어도 여기서 막지 않고 로드 → 기존 에러 처리에 위임
-      acceptWithSubs(f);
-    };
+    // 001, 002, 010 / 1, 2, 10 모두 올바른 순서가 되도록 자연 정렬
+    const collator = new Intl.Collator(undefined, { numeric: true });
+    usable.sort((a, b) => collator.compare(a.name, b.name));
 
-    probe.src = probeUrl;
+    const items = usable.map((file) => ({
+      id: uid(),
+      name: file.name,
+      file,
+      subFiles: matchSubFiles(file.name, subFiles),
+    }));
+
+    setPlaylist(items);
+    resetInput();
+
+    if (tooBig > 0) toast.warning(`1GB를 초과하는 파일 ${tooBig}개는 목록에서 제외했습니다.`);
+    toast.success(`재생목록 ${items.length}개를 불러왔습니다.`);
+
+    // 첫 트랙 자동 재생 준비
+    if (await loadTrack(items[0].file, items[0].subFiles)) setPlaylistIndex(0);
+  };
+
+  const selectTrack = async (index: number) => {
+    const item = playlist[index];
+    if (!item || index === playlistIndex) return;
+    // 인덱스는 가드를 통과했을 때만 옮긴다
+    if (await loadTrack(item.file, item.subFiles)) setPlaylistIndex(index);
   };
 
   // ⚠️ blob URL은 언마운트(STT/TTS 라우트 전환)에서 revoke하지 않는다.
@@ -249,17 +333,17 @@ export default function Player() {
 
   const canLoop = loopA != null && loopB != null && Math.abs(loopB - loopA) > 0.05;
 
-  const phrases = useMemo(() => {
-    return bookmarks
-      .filter((b) => b.type === "REGION" && typeof b.start === "number" && typeof b.end === "number" && b.end > b.start)
-      .map((b) => ({ id: b.id, start: b.start!, end: b.end!, label: b.label, tag: b.tag }))
-      .sort((a, b) => a.start - b.start);
-  }, [bookmarks]);
+  // Sentence = 활성 자막 트랙의 큐. 여러 트랙이 있으면 하나만 쓴다(합치면 구간이 겹친다).
+  // parseSubtitles가 start 정렬을 보장하므로 재정렬하지 않는다.
+  const sentences = useMemo(() => {
+    const track = subs.find((s) => s.enabled) ?? subs[0];
+    return track ? track.cues.filter((c) => c.end > c.start) : [];
+  }, [subs]);
 
-  const goPrevPhrase = () => {
-    if (!phrases.length) return;
+  const goPrevSentence = () => {
+    if (!sentences.length) return;
     const t = currentTime;
-    const prev = [...phrases].reverse().find((p) => p.start < t - 0.05) ?? phrases[phrases.length - 1];
+    const prev = [...sentences].reverse().find((p) => p.start < t - 0.05) ?? sentences[sentences.length - 1];
     setLoopA(prev.start);
     setLoopB(prev.end);
     setLoopEnabled(true);
@@ -267,10 +351,10 @@ export default function Player() {
     setTime(prev.start);
   };
 
-  const goNextPhrase = () => {
-    if (!phrases.length) return;
+  const goNextSentence = () => {
+    if (!sentences.length) return;
     const t = currentTime;
-    const next = phrases.find((p) => p.start > t + 0.05) ?? phrases[0];
+    const next = sentences.find((p) => p.start > t + 0.05) ?? sentences[0];
     setLoopA(next.start);
     setLoopB(next.end);
     setLoopEnabled(true);
@@ -566,6 +650,15 @@ export default function Player() {
               <Upload className="h-4 w-4" />
               미디어 불러오기
             </button>
+            {/* 폴더 전체를 재생목록으로. webkitdirectory는 React 타입에 없어 스프레드로 넣는다 */}
+            <input ref={folderInputRef} type="file" {...({ webkitdirectory: "" } as any)} className="hidden" onChange={onFolderChange} />
+            <button
+              onClick={onPickFolder}
+              title="폴더 안의 미디어를 전부 재생목록으로 불러옵니다"
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
+              <FolderOpen className="h-4 w-4" />
+              폴더 불러오기
+            </button>
             {mediaKind === "video" ? (
               <button
                 onClick={() => setShowVideo(!showVideo)}
@@ -747,19 +840,40 @@ export default function Player() {
 
             <div className="h-8 w-px bg-zinc-200" />
 
-            {/* Phrase nav */}
+            {/* Track nav — 재생목록은 경계가 명확한 편이 예측 가능하므로 양끝에서 순환하지 않고 비활성 */}
             <button
-              onClick={goPrevPhrase}
-              disabled={!phrases.length || controlsDisabled}
+              onClick={() => selectTrack(playlistIndex - 1)}
+              disabled={playlistIndex <= 0 || controlsDisabled}
+              title="이전 트랙"
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
-              <ChevronLeft className="h-4 w-4" /> 이전 Phrase
+              <SkipBack className="h-4 w-4" /> 이전 트랙
             </button>
 
             <button
-              onClick={goNextPhrase}
-              disabled={!phrases.length || controlsDisabled}
+              onClick={() => selectTrack(playlistIndex + 1)}
+              disabled={playlistIndex < 0 || playlistIndex >= playlist.length - 1 || controlsDisabled}
+              title="다음 트랙"
               className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
-              다음 Phrase <ChevronRight className="h-4 w-4" />
+              다음 트랙 <SkipForward className="h-4 w-4" />
+            </button>
+
+            <div className="h-8 w-px bg-zinc-200" />
+
+            {/* Sentence nav */}
+            <button
+              onClick={goPrevSentence}
+              disabled={!sentences.length || controlsDisabled}
+              title={sentences.length ? "자막 문장 단위로 이동" : "자막을 불러오면 문장 단위로 이동할 수 있습니다"}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
+              <ChevronLeft className="h-4 w-4" /> 이전 문장
+            </button>
+
+            <button
+              onClick={goNextSentence}
+              disabled={!sentences.length || controlsDisabled}
+              title={sentences.length ? "자막 문장 단위로 이동" : "자막을 불러오면 문장 단위로 이동할 수 있습니다"}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
+              다음 문장 <ChevronRight className="h-4 w-4" />
             </button>
 
             {/* Volume */}
@@ -891,9 +1005,9 @@ export default function Player() {
           </div>
         </div>
 
-        {/* Bookmark */}
+        {/* 재생목록 (폴더 불러오기 시에만 표시) */}
         <div className="mt-6">
-          <BookmarkPanel />
+          <PlaylistPanel onSelect={selectTrack} />
         </div>
       </div>
 

@@ -8,16 +8,9 @@ import type { SubTrack } from "@/lib/subtitles";
 
 export type MediaKind = "audio" | "video";
 
-export type Bookmark = {
-  id: string;
-  type: "POINT" | "REGION";
-  time?: number;
-  start?: number;
-  end?: number;
-  label: string;
-  tag?: string;
-  createdAt: number;
-};
+// ⚠️ File은 직렬화되면 {}가 되므로 playlist/playlistIndex는 partialize에서 제외한다(subs와 같은 이유).
+//    blob URL도 여기서 만들지 않는다 — 선택 시 Player의 acceptFile이 항상 1개만 생성·해제한다.
+export type PlaylistItem = { id: string; name: string; file: File; subFiles: File[] };
 
 type RecentItem = {
   fileName: string;
@@ -57,7 +50,6 @@ type PlayerState = {
   repeatTarget: number;
   repeatCount: number;
 
-  bookmarks: Bookmark[];
   recent: RecentItem[];
 
   // ✅ 자막 트랙(미디어 종속) — persist 대상 아님, setSource에서 초기화됨
@@ -65,6 +57,12 @@ type PlayerState = {
   addSubs: (tracks: SubTrack[]) => void;
   toggleSub: (id: string) => void;
   clearSubs: () => void;
+
+  playlist: PlaylistItem[];
+  playlistIndex: number;
+  setPlaylist: (items: PlaylistItem[]) => void;
+  setPlaylistIndex: (i: number) => void;
+  clearPlaylist: () => void;
 
   setSource: (payload: { mediaUrl: string; mediaKind: MediaKind; fileName?: string | null }) => void;
   setReady: (ready: boolean) => void;
@@ -86,10 +84,6 @@ type PlayerState = {
   setRepeatTarget: (n: number) => void;
   incRepeatCount: () => void;
   resetRepeatCount: () => void;
-
-  addBookmark: (b: Bookmark) => void;
-  updateBookmark: (id: string, patch: Partial<Bookmark>) => void;
-  removeBookmark: (id: string) => void;
 
   upsertRecent: (item: { fileName: string; mediaUrl: string; mediaKind: MediaKind; lastTime: number }) => void;
   updateRecentTime: (mediaUrl: string, lastTime: number) => void;
@@ -139,7 +133,6 @@ export const usePlayerStore = create<PlayerState>()(
       repeatTarget: 0,
       repeatCount: 0,
 
-      bookmarks: [],
       recent: [],
 
       subs: [],
@@ -147,6 +140,12 @@ export const usePlayerStore = create<PlayerState>()(
       addSubs: (tracks) => set({ subs: [...get().subs.filter((s) => !tracks.some((t) => t.fileName === s.fileName)), ...tracks] }),
       toggleSub: (id) => set({ subs: get().subs.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)) }),
       clearSubs: () => set({ subs: [] }),
+
+      playlist: [],
+      playlistIndex: -1,
+      setPlaylist: (items) => set({ playlist: items, playlistIndex: -1 }),
+      setPlaylistIndex: (i) => set({ playlistIndex: i }),
+      clearPlaylist: () => set({ playlist: [], playlistIndex: -1 }),
 
       setSource: ({ mediaUrl, mediaKind, fileName }) => {
         set({
@@ -194,10 +193,6 @@ export const usePlayerStore = create<PlayerState>()(
       incRepeatCount: () => set({ repeatCount: get().repeatCount + 1 }),
       resetRepeatCount: () => set({ repeatCount: 0 }),
 
-      addBookmark: (b) => set({ bookmarks: [b, ...get().bookmarks] }),
-      updateBookmark: (id, patch) => set({ bookmarks: get().bookmarks.map((x) => (x.id === id ? { ...x, ...patch } : x)) }),
-      removeBookmark: (id) => set({ bookmarks: get().bookmarks.filter((x) => x.id !== id) }),
-
       upsertRecent: (item) => {
         const next: RecentItem[] = [
           { fileName: item.fileName, mediaUrl: item.mediaUrl, mediaKind: item.mediaKind, lastTime: item.lastTime, lastOpenedAt: Date.now() },
@@ -240,7 +235,6 @@ export const usePlayerStore = create<PlayerState>()(
         volume: s.volume,
         zoomPps: s.zoomPps,
         repeatTarget: s.repeatTarget,
-        bookmarks: s.bookmarks,
         recent: s.recent,
         showVideo: s.showVideo,
       }),
