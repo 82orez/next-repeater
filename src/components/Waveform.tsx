@@ -7,6 +7,7 @@ import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import Minimap from "wavesurfer.js/dist/plugins/minimap.esm.js";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTimeCS } from "@/lib/time";
+import { isModalOpen } from "@/lib/dom";
 import TimeReadout from "@/components/TimeReadout";
 
 const AB_REGION_ID = "ab_region";
@@ -682,6 +683,9 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
     // ✅ ESC 키로 구간 초기화
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+
+      // 모달이 떠 있으면 Esc는 모달 몫이다(여기서 preventDefault하면 모달이 닫히지 않는다)
+      if (isModalOpen()) return;
 
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();

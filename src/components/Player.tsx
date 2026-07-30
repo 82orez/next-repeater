@@ -18,6 +18,7 @@ import {
   Download,
   FileText,
   FolderOpen,
+  ListMusic,
   SkipBack,
   SkipForward,
 } from "lucide-react";
@@ -27,9 +28,10 @@ import Waveform from "@/components/Waveform";
 import MediaView from "@/components/MediaView";
 import Recorder from "@/components/Recorder";
 import CaptionPanel from "@/components/CaptionPanel";
-import PlaylistPanel from "@/components/PlaylistPanel";
+import PlaylistDialog from "@/components/PlaylistDialog";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp } from "@/lib/time";
+import { isModalOpen } from "@/lib/dom";
 import { extractRegionToMp3 } from "@/lib/audioExport";
 import { transcodeVideo, type TranscodeOptions } from "@/lib/videoTranscode";
 import { parseSubtitles, labelFromFileName, SUB_EXT_RE, type SubTrack } from "@/lib/subtitles";
@@ -347,6 +349,14 @@ export default function Player() {
     if (await loadTrack(item.file, item.subFiles)) setPlaylistIndex(index);
   };
 
+  // ✅ 재생목록 모달 — 선택 시 닫기를 먼저 호출한다.
+  //    selectTrack은 duration 프로브 때문에 비동기라, 나중에 닫으면 모달이 잠깐 멈춘 듯 보인다.
+  const [playlistOpen, setPlaylistOpen] = useState(false);
+  const selectTrackAndClose = (index: number) => {
+    setPlaylistOpen(false);
+    void selectTrack(index);
+  };
+
   // ⚠️ blob URL은 언마운트(STT/TTS 라우트 전환)에서 revoke하지 않는다.
   //    스토어(모듈 싱글턴)의 mediaUrl이 살아있어야 복귀 시 그대로 재생됨(Format error 방지).
   //    revoke는 파일 교체(acceptFile)·변환(convertMedia) 시에만 수행 → 항상 1개만 존재하므로 누수 없음.
@@ -520,6 +530,9 @@ export default function Player() {
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
+      // 모달이 떠 있으면 전역 단축키는 넘긴다(목록 항목 위에서 Space가 재생 토글로 가로채이는 것 방지)
+      if (isModalOpen()) return;
+
       const tag = (ev.target as any)?.tagName?.toLowerCase?.();
       if (tag === "input" || tag === "textarea" || (ev.target as any)?.isContentEditable) return;
 
@@ -688,6 +701,16 @@ export default function Player() {
               <FolderOpen className="h-4 w-4" />
               폴더 불러오기
             </button>
+            {/* 재생목록은 폴더를 불러왔을 때만 존재 → 그때만 모달 여는 버튼을 보인다 */}
+            {playlist.length > 0 ? (
+              <button
+                onClick={() => setPlaylistOpen(true)}
+                title="재생목록 열기"
+                className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50">
+                <ListMusic className="h-4 w-4" />
+                재생목록 {playlist.length}
+              </button>
+            ) : null}
             {mediaKind === "video" ? (
               <button
                 onClick={() => setShowVideo(!showVideo)}
@@ -1040,12 +1063,10 @@ export default function Player() {
             </div>
           </div>
         </div>
-
-        {/* 재생목록 (폴더 불러오기 시에만 표시) */}
-        <div className="mt-6">
-          <PlaylistPanel onSelect={selectTrack} />
-        </div>
       </div>
+
+      {/* 재생목록 모달 — showModal()은 top layer로 뜨므로 마크업 위치는 무관 */}
+      <PlaylistDialog open={playlistOpen} onClose={() => setPlaylistOpen(false)} onSelect={selectTrackAndClose} />
 
       <footer className="mt-8 text-center text-xs text-zinc-500">Repeat Player v3 — Zoom + Ctrl/⌘+Wheel Zoom</footer>
     </div>
