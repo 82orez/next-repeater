@@ -59,6 +59,23 @@ const matchSubFiles = (mediaName: string, subFiles: File[]): File[] => {
 import { BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { TbRepeatOff } from "react-icons/tb";
 
+// 트랜스포트 버튼 공통 스타일(Recorder.tsx와 같은 패턴)
+const btnBase =
+  "inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60";
+
+const Divider = () => <div className="h-8 w-px bg-zinc-200" />;
+
+// 구분선 + 버튼 묶음 — 줄바꿈 시 통째로 넘어가도록 하나의 flex 아이템으로 만든다
+const clusterBase = "flex items-center gap-2";
+
+// 버튼 묶음 머리글 — 라벨 + 남는 폭을 채우는 실선
+const GroupLabel = ({ children }: { children: React.ReactNode }) => (
+  <div className="mb-2 flex items-center gap-2 text-[11px] font-medium text-zinc-400">
+    {children}
+    <span className="h-px flex-1 bg-zinc-100" />
+  </div>
+);
+
 export default function Player() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -706,6 +723,8 @@ export default function Player() {
 
         {/* ✅ Transport */}
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+          {/* ── 재생 · 이동 ── */}
+          <GroupLabel>재생 · 이동</GroupLabel>
           <div className="flex flex-wrap items-center gap-2">
             {/* Play / Pause */}
             <button
@@ -720,123 +739,6 @@ export default function Player() {
               {isPlaying ? "Pause" : "Play"}
             </button>
 
-            {/* A */}
-            <button
-              onClick={() => {
-                setLoopA(currentTime);
-                resetRepeatCount();
-              }}
-              disabled={!mediaUrl}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="A 지정 (KeyA)">
-              <Flag className="h-4 w-4" /> A
-            </button>
-
-            {/* B */}
-            <button
-              onClick={() => {
-                setLoopB(currentTime);
-                resetRepeatCount();
-                setLoopEnabled(true);
-              }}
-              disabled={!mediaUrl}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="B 지정 (KeyB)">
-              <Flag className="h-4 w-4" /> B
-            </button>
-
-            {/* Repeat Toggle */}
-            <button
-              onClick={() => {
-                if (!canLoop) return;
-                setLoopEnabled(!loopEnabled);
-                resetRepeatCount();
-              }}
-              disabled={!canLoop}
-              className={clsx(
-                "inline-flex items-center justify-center rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
-                canLoop
-                  ? loopEnabled
-                    ? "bg-blue-600 text-white hover:bg-blue-700"
-                    : "border border-zinc-200 bg-amber-200 text-zinc-900 hover:bg-amber-100"
-                  : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
-              )}
-              title="반복 토글 (R)">
-              {canLoop ? loopEnabled ? <BsRepeat size={16} /> : <BsRepeat1 size={16} /> : <TbRepeatOff size={16} />}
-            </button>
-
-            {/* Reset loop */}
-            <button
-              onClick={() => {
-                setLoopA(null);
-                setLoopB(null);
-                setLoopEnabled(false);
-                resetRepeatCount();
-              }}
-              disabled={!mediaUrl}
-              className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title="구간 초기화 (Esc)">
-              <RotateCcw className="h-4 w-4" />
-              <span className="inline-flex items-center gap-2">Reset</span>
-            </button>
-
-            {/* ✅ 선택 구간 MP3 추출 (비트레이트 선택) */}
-            <div className="inline-flex items-center overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-              <button
-                onClick={extractRegion}
-                disabled={!canLoop || controlsDisabled || extracting}
-                className="inline-flex min-w-[6.5rem] items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-                title="선택한 A/B 구간을 MP3 파일로 저장">
-                {extracting ? (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
-                ) : (
-                  <Download className="h-4 w-4" />
-                )}
-                {extracting ? "추출 중" : "구간 추출"}
-              </button>
-              <select
-                value={mp3Kbps}
-                onChange={(e) => setMp3Kbps(Number(e.target.value))}
-                disabled={extracting}
-                className="border-l border-zinc-200 bg-white py-2 pr-2 pl-2 text-sm text-zinc-700 outline-none hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-                title="MP3 비트레이트 (높을수록 고음질·큰 용량)">
-                {[128, 192, 320].map((k) => (
-                  <option key={k} value={k}>
-                    {k}k
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* ✅ A부터 재생 (구간 유지) / (A/B 없으면 -3초) */}
-            <button
-              onClick={playFromA}
-              disabled={controlsDisabled}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "-3초 이동 (←)"}>
-              {canLoop ? <ArrowLeftToLine className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-              {canLoop ? "A" : "-3s"}
-            </button>
-
-            {/* ✅ B부터 재생 (구간 해제) / (A/B 없으면 +3초) */}
-            <button
-              onClick={playFromBAndClearLoop}
-              disabled={controlsDisabled}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "+3초 이동 (→)"}>
-              {canLoop ? (
-                <>
-                  B <ArrowRightFromLine className="h-4 w-4" />
-                </>
-              ) : (
-                <>
-                  +3s <ChevronRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
-
-            <div className="h-8 w-px bg-zinc-200" />
-
             {/* 처음으로 */}
             <button
               onClick={() => {
@@ -844,49 +746,77 @@ export default function Player() {
                 setTime(0);
               }}
               disabled={controlsDisabled}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className={btnBase}
               title="정지 + 00:00.00 이동">
               <RotateCcw className="h-4 w-4" />
               처음으로
             </button>
 
-            <div className="h-8 w-px bg-zinc-200" />
+            {/* 구분선은 뒤따르는 버튼과 한 덩어리로 감싼다 — 줄바꿈 시 구분선만 줄 끝에 남는 것을 막는다 */}
+            <div className={clusterBase}>
+              <Divider />
 
-            {/* Track nav — 재생목록은 경계가 명확한 편이 예측 가능하므로 양끝에서 순환하지 않고 비활성 */}
-            <button
-              onClick={() => selectTrack(playlistIndex - 1)}
-              disabled={playlistIndex <= 0 || controlsDisabled}
-              title="이전 트랙"
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
-              <SkipBack className="h-4 w-4" /> 이전 트랙
-            </button>
+              {/* ✅ A부터 재생 (구간 유지) / (A/B 없으면 -3초) */}
+              <button
+                onClick={playFromA}
+                disabled={controlsDisabled}
+                className={btnBase}
+                title={canLoop ? "현재 A/B 구간의 A 지점부터 다시 재생" : "-3초 이동 (←)"}>
+                {canLoop ? <ArrowLeftToLine className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                {canLoop ? "A" : "-3s"}
+              </button>
 
-            <button
-              onClick={() => selectTrack(playlistIndex + 1)}
-              disabled={playlistIndex < 0 || playlistIndex >= playlist.length - 1 || controlsDisabled}
-              title="다음 트랙"
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
-              다음 트랙 <SkipForward className="h-4 w-4" />
-            </button>
+              {/* ✅ B부터 재생 (구간 해제) / (A/B 없으면 +3초) */}
+              <button
+                onClick={playFromBAndClearLoop}
+                disabled={controlsDisabled}
+                className={btnBase}
+                title={canLoop ? "A/B 구간을 해제하고 B 지점부터 재생" : "+3초 이동 (→)"}>
+                {canLoop ? (
+                  <>
+                    B <ArrowRightFromLine className="h-4 w-4" />
+                  </>
+                ) : (
+                  <>
+                    +3s <ChevronRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </div>
 
-            <div className="h-8 w-px bg-zinc-200" />
+            {/* Sentence nav — 자막이 없으면 아예 렌더하지 않는다(구분선도 함께) */}
+            {sentences.length > 0 ? (
+              <div className={clusterBase}>
+                <Divider />
+                <button onClick={goPrevSentence} disabled={controlsDisabled} title="이전 문장으로 이동" className={btnBase}>
+                  <ChevronLeft className="h-4 w-4" /> 이전 문장
+                </button>
+                <button onClick={goNextSentence} disabled={controlsDisabled} title="다음 문장으로 이동" className={btnBase}>
+                  다음 문장 <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            ) : null}
 
-            {/* Sentence nav */}
-            <button
-              onClick={goPrevSentence}
-              disabled={!sentences.length || controlsDisabled}
-              title={sentences.length ? "자막 문장 단위로 이동" : "자막을 불러오면 문장 단위로 이동할 수 있습니다"}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
-              <ChevronLeft className="h-4 w-4" /> 이전 문장
-            </button>
-
-            <button
-              onClick={goNextSentence}
-              disabled={!sentences.length || controlsDisabled}
-              title={sentences.length ? "자막 문장 단위로 이동" : "자막을 불러오면 문장 단위로 이동할 수 있습니다"}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60">
-              다음 문장 <ChevronRight className="h-4 w-4" />
-            </button>
+            {/* Track nav — 재생목록이 없으면 숨김. 목록 양끝에서는 순환하지 않고 비활성 */}
+            {playlist.length > 0 ? (
+              <div className={clusterBase}>
+                <Divider />
+                <button
+                  onClick={() => selectTrack(playlistIndex - 1)}
+                  disabled={playlistIndex <= 0 || controlsDisabled}
+                  title="이전 트랙"
+                  className={btnBase}>
+                  <SkipBack className="h-4 w-4" /> 이전 트랙
+                </button>
+                <button
+                  onClick={() => selectTrack(playlistIndex + 1)}
+                  disabled={playlistIndex < 0 || playlistIndex >= playlist.length - 1 || controlsDisabled}
+                  title="다음 트랙"
+                  className={btnBase}>
+                  다음 트랙 <SkipForward className="h-4 w-4" />
+                </button>
+              </div>
+            ) : null}
 
             {/* Volume */}
             <div className="ml-auto flex items-center gap-3">
@@ -907,8 +837,102 @@ export default function Player() {
             </div>
           </div>
 
+          {/* ── A–B 구간 ── */}
+          <div className="mt-4 border-t border-zinc-100 pt-3">
+            <GroupLabel>A–B 구간</GroupLabel>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* A */}
+              <button
+                onClick={() => {
+                  setLoopA(currentTime);
+                  resetRepeatCount();
+                }}
+                disabled={!mediaUrl}
+                className={btnBase}
+                title="A 지정 (KeyA)">
+                <Flag className="h-4 w-4" /> A
+              </button>
+
+              {/* B */}
+              <button
+                onClick={() => {
+                  setLoopB(currentTime);
+                  resetRepeatCount();
+                  setLoopEnabled(true);
+                }}
+                disabled={!mediaUrl}
+                className={btnBase}
+                title="B 지정 (KeyB)">
+                <Flag className="h-4 w-4" /> B
+              </button>
+
+              {/* Repeat Toggle */}
+              <button
+                onClick={() => {
+                  if (!canLoop) return;
+                  setLoopEnabled(!loopEnabled);
+                  resetRepeatCount();
+                }}
+                disabled={!canLoop}
+                className={clsx(
+                  "inline-flex items-center justify-center rounded-2xl px-3 py-2 text-sm font-medium shadow-sm",
+                  canLoop
+                    ? loopEnabled
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "border border-zinc-200 bg-amber-200 text-zinc-900 hover:bg-amber-100"
+                    : "cursor-not-allowed border border-zinc-200 bg-white text-zinc-400",
+                )}
+                title="반복 토글 (R)">
+                {canLoop ? loopEnabled ? <BsRepeat size={16} /> : <BsRepeat1 size={16} /> : <TbRepeatOff size={16} />}
+              </button>
+
+              {/* Reset loop */}
+              <button
+                onClick={() => {
+                  setLoopA(null);
+                  setLoopB(null);
+                  setLoopEnabled(false);
+                  resetRepeatCount();
+                }}
+                disabled={!mediaUrl}
+                className={btnBase}
+                title="구간 초기화 (Esc)">
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </button>
+
+              {/* ✅ 선택 구간 MP3 추출 (비트레이트 선택) */}
+              <div className="inline-flex items-center overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+                <button
+                  onClick={extractRegion}
+                  disabled={!canLoop || controlsDisabled || extracting}
+                  className="inline-flex min-w-[6.5rem] items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  title="선택한 A/B 구간을 MP3 파일로 저장">
+                  {extracting ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {extracting ? "추출 중" : "구간 추출"}
+                </button>
+                <select
+                  value={mp3Kbps}
+                  onChange={(e) => setMp3Kbps(Number(e.target.value))}
+                  disabled={extracting}
+                  className="border-l border-zinc-200 bg-white py-2 pr-2 pl-2 text-sm text-zinc-700 outline-none hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  title="MP3 비트레이트 (높을수록 고음질·큰 용량)">
+                  {[128, 192, 320].map((k) => (
+                    <option key={k} value={k}>
+                      {k}k
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
           {/* 내 발음 녹음 (분리 배치) */}
-          <div className="mt-3 flex flex-col items-center justify-center gap-3 border-t border-zinc-100 pt-3">
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-3 border-t border-zinc-100 pt-3">
             <div className="text-sm font-medium text-zinc-600">내 발음 녹음</div>
             <Recorder />
           </div>
