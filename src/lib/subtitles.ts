@@ -1,5 +1,6 @@
 // src/lib/subtitles.ts
-// SRT/VTT 파서 + 큐 조회. 외부 라이브러리 없이 직접 구현.
+// SRT/VTT 파서·직렬화 + 큐 조회. 외부 라이브러리 없이 직접 구현.
+import { pad2 } from "@/lib/time";
 
 // ⚠️ .srt는 MIME이 비어 있거나 text/plain으로 오므로 분류는 반드시 확장자 기준(file.type 신뢰 금지)
 export const SUB_EXT_RE = /\.(srt|vtt)$/i;
@@ -76,6 +77,34 @@ export function parseSubtitles(raw: string): Cue[] {
 
   cues.sort((a, b) => a.start - b.start);
   return cues;
+}
+
+/**
+ * 초 → `HH:MM:SS,mmm`(SRT) / `HH:MM:SS.mmm`(VTT).
+ * time.ts의 fmtTime/fmtTimeCS는 화면 표시용(시간이 0이면 생략)이라 자막 규격에는 쓸 수 없다.
+ */
+function stamp(sec: number, msSep: "," | "."): string {
+  const totalMs = Math.round(Math.max(0, Number.isFinite(sec) ? sec : 0) * 1000);
+  const hh = Math.floor(totalMs / 3_600_000);
+  const mm = Math.floor((totalMs % 3_600_000) / 60_000);
+  const ss = Math.floor((totalMs % 60_000) / 1000);
+  const ms = totalMs % 1000;
+  return `${pad2(hh)}:${pad2(mm)}:${pad2(ss)}${msSep}${String(ms).padStart(3, "0")}`;
+}
+
+// parseSubtitles가 다시 읽을 수 있는 블록(왕복 보장). 개행은 LF 고정.
+function toBlocks(cues: Cue[], msSep: "," | "."): string {
+  return cues.map((c, i) => `${i + 1}\n${stamp(c.start, msSep)} --> ${stamp(c.end, msSep)}\n${c.text.trim()}\n`).join("\n");
+}
+
+/** 큐 배열 → SRT 문자열 */
+export function formatSrt(cues: Cue[]): string {
+  return toBlocks(cues, ",");
+}
+
+/** 큐 배열 → VTT 문자열(헤더 + 밀리초 구분자만 다름) */
+export function formatVtt(cues: Cue[]): string {
+  return `WEBVTT\n\n${toBlocks(cues, ".")}`;
 }
 
 /**

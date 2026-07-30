@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { ArrowLeft, Captions, Copy, Download, FileText, Upload } from "lucide-react";
 import { toast } from "sonner";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { formatSrt, formatVtt, type Cue } from "@/lib/subtitles";
 
 const MODELS = [
   { id: "gpt-4o-transcribe", label: "고품질 (gpt-4o-transcribe)" },
@@ -17,9 +18,17 @@ const FORMATS = [
   { id: "text", label: "텍스트 (.txt)", ext: "txt", mime: "text/plain" },
   { id: "srt", label: "자막 (.srt)", ext: "srt", mime: "text/plain" },
   { id: "vtt", label: "자막 (.vtt)", ext: "vtt", mime: "text/vtt" },
+  { id: "all", label: "텍스트+자막 (모두)", ext: "txt", mime: "text/plain" },
 ] as const;
 
-// ⚠️ srt/vtt는 whisper-1 전용 — gpt-4o-transcribe 계열은 json만 지원한다(서버도 조합을 검증한다).
+// all 결과에서 골라 볼 수 있는 탭 — id는 FORMATS의 단일 형식과 같게 맞춰 확장자·MIME을 재사용한다
+const RESULT_TABS = [
+  { id: "text", label: "텍스트" },
+  { id: "srt", label: "SRT" },
+  { id: "vtt", label: "VTT" },
+] as const;
+
+// ⚠️ srt/vtt/all(verbose_json)은 whisper-1 전용 — gpt-4o-transcribe 계열은 json만 지원한다(서버도 조합을 검증한다).
 const SUBTITLE_MODEL = "whisper-1";
 const isModelAllowed = (modelId: string, formatId: string) => formatId === "text" || modelId === SUBTITLE_MODEL;
 const fmtOf = (formatId: string) => FORMATS.find((f) => f.id === formatId) ?? FORMATS[0];
@@ -39,7 +48,9 @@ export default function SttClient() {
   const [error, setError] = useState<string | null>(null);
   // ⚠️ 결과는 생성 시점 스냅샷으로 담는다 — 현재 format을 읽으면 받은 뒤 형식을 바꿨을 때
   //    SRT 내용에 .vtt 확장자가 붙는다(TtsClient의 resultMeta와 같은 이유).
-  const [result, setResult] = useState<{ text: string; format: string; fileName: string } | null>(null);
+  const [result, setResult] = useState<{ text: string; format: string; fileName: string; cues?: Cue[] } | null>(null);
+  // all 결과에서 보고 있는 탭(text/srt/vtt) — 새 결과가 오면 text로 초기화
+  const [tab, setTab] = useState<string>("text");
   const [copied, setCopied] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -83,6 +94,18 @@ export default function SttClient() {
   };
 
   const isSubtitle = format !== "text";
+  const isAll = format === "all";
+
+  // all 결과에서 현재 보고 있는 형식. 단일 형식 결과는 스냅샷 형식을 그대로 쓴다.
+  const shownFormat = result?.format === "all" ? tab : (result?.format ?? "text");
+
+  // SRT/VTT는 cues에서 파생 — state로 중복 저장하지 않는다
+  const shownText = useMemo(() => {
+    if (!result) return "";
+    if (result.format !== "all" || shownFormat === "text") return result.text;
+    const cues = result.cues ?? [];
+    return shownFormat === "srt" ? formatSrt(cues) : formatVtt(cues);
+  }, [result, shownFormat]);
 
   const requestExtract = () => {
     if (!file || isLoading) return;
@@ -113,7 +136,8 @@ export default function SttClient() {
 
       const data = await res.json();
       const text = typeof data?.text === "string" ? data.text : String(data?.text ?? "");
-      setResult({ text, format, fileName: file.name });
+      setResult({ text, format, fileName: file.name, cues: Array.isArray(data?.cues) ? data.cues : undefined });
+      setTab("text");
     } catch (e: any) {
       setError(e.message || (isSubtitle ? "자막 생성 중 오류가 발생했습니다." : "텍스트 추출 중 오류가 발생했습니다."));
     } finally {
@@ -124,7 +148,7 @@ export default function SttClient() {
   const onCopy = async () => {
     if (!result) return;
     try {
-      await navigator.clipboard.writeText(result.text);
+      await navigator.clipboard.writeText(shownText);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -134,11 +158,11 @@ export default function SttClient() {
 
   const onDownload = () => {
     if (!result) return;
-    // 파일명·MIME은 현재 state가 아니라 생성 시점 스냅샷에서 읽는다
-    const fmt = fmtOf(result.format);
+    // 파일명·MIME은 현재 format state가 아니라 생성 시점 스냅샷(all이면 활성 탭)에서 읽는다
+    const fmt = fmtOf(shownFormat);
     const name = `${result.fileName.replace(/\.[^.]+$/, "")}.${fmt.ext}`;
     revokeTxt();
-    const blob = new Blob([result.text], { type: `${fmt.mime};charset=utf-8` });
+    const blob = new Blob([shownText], { type: `${fmt.mime};charset=utf-8` });
     const url = URL.createObjectURL(blob);
     txtUrlRef.current = url;
     const a = document.createElement("a");
@@ -195,7 +219,13 @@ export default function SttClient() {
               </button>
             ))}
           </div>
-          {isSubtitle && <p className="mt-1.5 text-xs text-zinc-500">타임코드가 붙은 자막 파일로 받습니다. 플레이어에서 바로 열 수 있어요.</p>}
+          {isSubtitle && (
+            <p className="mt-1.5 text-xs text-zinc-500">
+              {isAll
+                ? "한 번의 호출로 텍스트와 자막을 모두 만듭니다. (자막 하나만 만들 때와 비용이 같아요)"
+                : "타임코드가 붙은 자막 파일로 받습니다. 플레이어에서 바로 열 수 있어요."}
+            </p>
+          )}
         </div>
 
         {/* 모델 선택 */}
@@ -237,7 +267,7 @@ export default function SttClient() {
           ) : (
             <>
               {isSubtitle ? <Captions className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-              {isSubtitle ? "자막 만들기" : "텍스트 추출"}
+              {isAll ? "텍스트+자막 만들기" : isSubtitle ? "자막 만들기" : "텍스트 추출"}
             </>
           )}
         </button>
@@ -248,10 +278,27 @@ export default function SttClient() {
         {/* 결과 — 제목·파일명은 현재 state가 아니라 생성 시점 스냅샷(result.format)을 따른다 */}
         {result !== null && (
           <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-zinc-700">
-                {result.format === "text" ? "추출된 텍스트" : `만들어진 자막 (.${fmtOf(result.format).ext})`}
-              </p>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              {result.format === "all" ? (
+                // 한 번의 호출로 만든 세 결과 — 탭으로 골라 보고, 복사·다운로드는 활성 탭 기준
+                <div className="flex flex-wrap gap-1.5">
+                  {RESULT_TABS.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTab(t.id)}
+                      className={clsx(
+                        "rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+                        tab === t.id ? "border-blue-600 bg-blue-50 text-blue-700" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-100",
+                      )}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm font-medium text-zinc-700">
+                  {result.format === "text" ? "추출된 텍스트" : `만들어진 자막 (.${fmtOf(result.format).ext})`}
+                </p>
+              )}
               <div className="flex gap-2">
                 <button
                   onClick={onCopy}
@@ -268,7 +315,7 @@ export default function SttClient() {
               </div>
             </div>
             <textarea
-              value={result.text}
+              value={shownText}
               readOnly
               rows={10}
               className="w-full resize-y rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none"
@@ -279,7 +326,7 @@ export default function SttClient() {
 
       <ConfirmDialog
         open={confirmOpen}
-        title={isSubtitle ? "자막을 만들까요?" : "텍스트를 추출할까요?"}
+        title={isAll ? "텍스트와 자막을 만들까요?" : isSubtitle ? "자막을 만들까요?" : "텍스트를 추출할까요?"}
         description={`${fmtOf(format).label} · ${MODELS.find((m) => m.id === model)?.label ?? model} — OpenAI API가 호출되고 token이 소모됩니다.`}
         confirmLabel={isSubtitle ? "만들기" : "추출"}
         onConfirm={onExtract}

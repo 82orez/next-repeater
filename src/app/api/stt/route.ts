@@ -4,9 +4,10 @@ import { NextResponse } from "next/server";
 const MODELS = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"] as const;
 const MAX_BYTES = 25 * 1024 * 1024; // OpenAI 오디오 업로드 제한 25MB
 
-// ⚠️ srt/vtt는 whisper-1 전용 — gpt-4o-transcribe 계열은 json만 지원한다(OpenAI SDK 문서).
-const FORMATS = ["text", "srt", "vtt"] as const;
-const SUBTITLE_FORMATS = new Set(["srt", "vtt"]);
+// ⚠️ srt/vtt/verbose_json은 whisper-1 전용 — gpt-4o-transcribe 계열은 json만 지원한다(OpenAI SDK 문서).
+//    all = verbose_json으로 한 번 호출해 텍스트와 구간을 함께 받는다(호출·비용은 srt 하나와 동일).
+const FORMATS = ["text", "srt", "vtt", "all"] as const;
+const SUBTITLE_FORMATS = new Set(["srt", "vtt", "all"]);
 const SUBTITLE_MODEL = "whisper-1";
 
 function jsonError(message: string, status: number) {
@@ -49,7 +50,15 @@ export async function POST(request: Request) {
 
   try {
     const openai = new OpenAI({ apiKey });
-    // text/srt/vtt는 모두 문자열로 돌아온다
+
+    // all은 verbose_json(객체) — 나머지 셋은 문자열이라 반환 타입이 달라 호출을 분기한다
+    if (format === "all") {
+      const res = await openai.audio.transcriptions.create({ file, model, response_format: "verbose_json" });
+      // tokens/logprobs 등 큰 필드는 버리고 Cue 모양({start,end,text})만 넘긴다
+      const cues = (res.segments ?? []).map((s) => ({ start: s.start, end: s.end, text: s.text.trim() }));
+      return NextResponse.json({ text: res.text, cues });
+    }
+
     const text = await openai.audio.transcriptions.create({
       file,
       model,
