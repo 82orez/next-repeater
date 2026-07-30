@@ -4,6 +4,11 @@ import { NextResponse } from "next/server";
 const MODELS = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"] as const;
 const MAX_BYTES = 25 * 1024 * 1024; // OpenAI 오디오 업로드 제한 25MB
 
+// ⚠️ srt/vtt는 whisper-1 전용 — gpt-4o-transcribe 계열은 json만 지원한다(OpenAI SDK 문서).
+const FORMATS = ["text", "srt", "vtt"] as const;
+const SUBTITLE_FORMATS = new Set(["srt", "vtt"]);
+const SUBTITLE_MODEL = "whisper-1";
+
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -23,6 +28,8 @@ export async function POST(request: Request) {
 
   const file = form.get("file");
   const model = form.get("model");
+  // 미지정이면 text — 형식을 보내지 않던 이전 클라이언트와의 호환
+  const format = form.get("format") ?? "text";
 
   if (!(file instanceof File) || file.size === 0) {
     return jsonError("오디오 파일을 첨부해 주세요.", 400);
@@ -33,13 +40,20 @@ export async function POST(request: Request) {
   if (typeof model !== "string" || !MODELS.includes(model as any)) {
     return jsonError("잘못된 모델입니다.", 400);
   }
+  if (typeof format !== "string" || !FORMATS.includes(format as any)) {
+    return jsonError("잘못된 출력 형식입니다.", 400);
+  }
+  if (SUBTITLE_FORMATS.has(format) && model !== SUBTITLE_MODEL) {
+    return jsonError("자막 형식은 whisper-1에서만 지원합니다.", 400);
+  }
 
   try {
     const openai = new OpenAI({ apiKey });
+    // text/srt/vtt는 모두 문자열로 돌아온다
     const text = await openai.audio.transcriptions.create({
       file,
       model,
-      response_format: "text",
+      response_format: format as "text" | "srt" | "vtt",
     });
 
     return NextResponse.json({ text });
