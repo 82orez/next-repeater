@@ -18,7 +18,7 @@ const FORMATS = [
   { id: "text", label: "텍스트 (.txt)", ext: "txt", mime: "text/plain" },
   { id: "srt", label: "자막 (.srt)", ext: "srt", mime: "text/plain" },
   { id: "vtt", label: "자막 (.vtt)", ext: "vtt", mime: "text/vtt" },
-  { id: "all", label: "텍스트+자막 (모두)", ext: "txt", mime: "text/plain" },
+  { id: "all", label: "텍스트 + 자막 (모두)", ext: "txt", mime: "text/plain" },
 ] as const;
 
 // all 결과에서 골라 볼 수 있는 탭 — id는 FORMATS의 단일 형식과 같게 맞춰 확장자·MIME을 재사용한다
@@ -267,7 +267,7 @@ export default function SttClient() {
           ) : (
             <>
               {isSubtitle ? <Captions className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-              {isAll ? "텍스트+자막 만들기" : isSubtitle ? "자막 만들기" : "텍스트 추출"}
+              {isAll ? "텍스트 + 자막 만들기" : isSubtitle ? "자막 만들기" : "텍스트 추출"}
             </>
           )}
         </button>
