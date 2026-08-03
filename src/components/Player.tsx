@@ -92,6 +92,8 @@ export default function Player() {
   const mediaKind = usePlayerStore((s) => s.mediaKind);
   const showVideo = usePlayerStore((s) => s.showVideo);
   const setShowVideo = usePlayerStore((s) => s.setShowVideo);
+  const showCaptions = usePlayerStore((s) => s.showCaptions);
+  const setShowCaptions = usePlayerStore((s) => s.setShowCaptions);
   const fileName = usePlayerStore((s) => s.fileName);
 
   const isReady = usePlayerStore((s) => s.isReady);
@@ -721,6 +723,19 @@ export default function Player() {
                     : "border-zinc-300 bg-zinc-50 text-zinc-700 hover:bg-zinc-100",
                 )}>
                 {showVideo ? "비디오 숨기기" : "비디오 보기"}
+              </button>
+            ) : null}
+            {/* 자막 가림 토글은 카드 밖(여기)에 있어야 한다 — 카드 안이면 가린 뒤 다시 켤 수 없다 */}
+            {subs.length > 0 ? (
+              <button
+                onClick={() => setShowCaptions(!showCaptions)}
+                className={clsx(
+                  "inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-medium shadow-sm",
+                  showCaptions
+                    ? "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
+                    : "border-zinc-300 bg-zinc-50 text-zinc-700 hover:bg-zinc-100",
+                )}>
+                {showCaptions ? "자막 가리기" : "자막 보기"}
               </button>
             ) : null}
           </div>

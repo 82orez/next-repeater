@@ -3,7 +3,6 @@
 // ✅ 자막 패널 — 영상 오버레이가 아니라 독립 카드.
 //    "비디오 숨기기" 상태나 오디오 전용 파일에서도 동일하게 동작한다.
 import clsx from "clsx";
-import { X } from "lucide-react";
 import { usePlayerStore } from "@/store/playerStore";
 import { findCueText, type SubTrack } from "@/lib/subtitles";
 
@@ -40,10 +39,12 @@ function TrackChip({ track, onToggle }: { track: SubTrack; onToggle: () => void 
 export default function CaptionPanel() {
   const subs = usePlayerStore((s) => s.subs);
   const toggleSub = usePlayerStore((s) => s.toggleSub);
-  const clearSubs = usePlayerStore((s) => s.clearSubs);
+  const showCaptions = usePlayerStore((s) => s.showCaptions);
 
   // 자막이 없으면 카드 자체를 렌더하지 않는다(빈 상자 방지)
   if (subs.length === 0) return null;
+  // 가림 토글은 Player 상단 버튼 줄에 있다 — 카드 밖이라 여기서 통째로 빠져도 다시 켤 수 있다
+  if (!showCaptions) return null;
 
   const active = subs.filter((s) => s.enabled);
   // 켜진 트랙의 태그는 각자의 칸으로 내려가므로, 윗줄에는 꺼진 트랙만 남긴다.
@@ -52,18 +53,14 @@ export default function CaptionPanel() {
 
   return (
     <div className="my-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {inactive.map((t) => (
-          <TrackChip key={t.id} track={t} onToggle={() => toggleSub(t.id)} />
-        ))}
-        <button
-          onClick={clearSubs}
-          title="자막 모두 지우기"
-          className="ml-auto inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-0.5 text-xs font-medium text-zinc-500 hover:bg-zinc-50">
-          <X className="h-3 w-3" />
-          지우기
-        </button>
-      </div>
+      {/* 윗줄엔 꺼진 트랙만 → 하나도 없으면 렌더하지 않는다(빈 div의 mb-3가 위쪽 여백으로 남는다) */}
+      {inactive.length > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {inactive.map((t) => (
+            <TrackChip key={t.id} track={t} onToggle={() => toggleSub(t.id)} />
+          ))}
+        </div>
+      ) : null}
 
       {active.length === 0 ? (
         <p className="text-sm text-zinc-400">표시할 자막을 선택하세요.</p>

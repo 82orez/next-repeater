@@ -31,6 +31,9 @@ type PlayerState = {
   showVideo: boolean;
   setShowVideo: (v: boolean) => void;
 
+  showCaptions: boolean;
+  setShowCaptions: (v: boolean) => void;
+
   isReady: boolean;
   isPlaying: boolean;
   duration: number;
@@ -110,6 +113,9 @@ export const usePlayerStore = create<PlayerState>()(
 
       showVideo: true,
       setShowVideo: (v) => set({ showVideo: v }),
+
+      showCaptions: true,
+      setShowCaptions: (v) => set({ showCaptions: v }),
 
       isReady: false,
       isPlaying: false,
@@ -237,6 +243,7 @@ export const usePlayerStore = create<PlayerState>()(
         repeatTarget: s.repeatTarget,
         recent: s.recent,
         showVideo: s.showVideo,
+        showCaptions: s.showCaptions,
       }),
     },
   ),
