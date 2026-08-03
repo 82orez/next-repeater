@@ -6,7 +6,7 @@ import WaveSurfer from "wavesurfer.js";
 import Regions from "wavesurfer.js/dist/plugins/regions.esm.js";
 import Minimap from "wavesurfer.js/dist/plugins/minimap.esm.js";
 import { usePlayerStore } from "@/store/playerStore";
-import { fmtTimeCS } from "@/lib/time";
+import { fmtTimeCS, MIN_LOOP_SEC } from "@/lib/time";
 import { isModalOpen } from "@/lib/dom";
 import TimeReadout from "@/components/TimeReadout";
 
@@ -378,7 +378,7 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
 
       const a = Math.min(a0, b0);
       const b = Math.max(a0, b0);
-      if (b <= a) return;
+      if (b - a <= MIN_LOOP_SEC) return;
 
       const now = typeof ws.getCurrentTime === "function" ? ws.getCurrentTime() : st.currentTime;
 
@@ -427,7 +427,7 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
 
         const a = Math.min(a0, b0);
         const b = Math.max(a0, b0);
-        if (b <= a) return;
+        if (b - a <= MIN_LOOP_SEC) return;
 
         const EPS_END = 0.01;
         if (t >= b - EPS_END) {
@@ -459,7 +459,9 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
 
       const a = Math.min(a0, b0);
       const b = Math.max(a0, b0);
-      if (b <= a) return;
+      // ⚠️ `b <= a`가 아니라 MIN_LOOP_SEC 기준 — Player의 canLoop과 같은 값이어야 한다.
+      //    더 느슨하면(예: b > a) 10ms짜리 구간에서 루프는 도는데 반복 토글은 비활성이라 빠져나올 수 없다.
+      if (b - a <= MIN_LOOP_SEC) return;
       if (loopGuardRef.current) return;
 
       if (t >= b) {
@@ -649,7 +651,7 @@ export default function Waveform({ mediaRef }: { mediaRef: React.RefObject<HTMLV
       } catch {}
       rbTmpRegionRef.current = null;
 
-      if (b0 - a0 < 0.05) {
+      if (b0 - a0 < MIN_LOOP_SEC) {
         const st = usePlayerStore.getState();
         redrawFromValues(st.loopA, st.loopB, st.loopEnabled);
         return;

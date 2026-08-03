@@ -30,7 +30,7 @@ import Recorder from "@/components/Recorder";
 import CaptionPanel from "@/components/CaptionPanel";
 import PlaylistDialog from "@/components/PlaylistDialog";
 import { usePlayerStore } from "@/store/playerStore";
-import { fmtTime, clamp } from "@/lib/time";
+import { fmtTime, clamp, MIN_LOOP_SEC } from "@/lib/time";
 import { isModalOpen } from "@/lib/dom";
 import { extractRegionToMp3 } from "@/lib/audioExport";
 import { transcodeVideo, type TranscodeOptions } from "@/lib/videoTranscode";
@@ -129,6 +129,7 @@ export default function Player() {
   const setLoopEnabled = usePlayerStore((s) => s.setLoopEnabled);
   const setLoopA = usePlayerStore((s) => s.setLoopA);
   const setLoopB = usePlayerStore((s) => s.setLoopB);
+  const setLoopRange = usePlayerStore((s) => s.setLoopRange);
   const setRepeatTarget = usePlayerStore((s) => s.setRepeatTarget);
   const resetRepeatCount = usePlayerStore((s) => s.resetRepeatCount);
 
@@ -372,22 +373,29 @@ export default function Player() {
     return `${fmtTime(a)} → ${fmtTime(b)} (${fmtTime(b - a)})`;
   }, [loopA, loopB]);
 
-  const canLoop = loopA != null && loopB != null && Math.abs(loopB - loopA) > 0.05;
+  const canLoop = loopA != null && loopB != null && Math.abs(loopB - loopA) > MIN_LOOP_SEC;
 
   // Sentence = 활성 자막 트랙의 큐. 여러 트랙이 있으면 하나만 쓴다(합치면 구간이 겹친다).
   // parseSubtitles가 start 정렬을 보장하므로 재정렬하지 않는다.
+  // ⚠️ MIN_LOOP_SEC보다 짧은 큐는 버린다 — 유튜브 자동생성 자막(--write-auto-subs)은 roll-up 방식이라
+  //    같은 문장을 10ms짜리 "깜빡임" 큐 + 정상 길이 큐로 두 번 낸다(실측: 1079개 중 539개가 ≤0.05초).
+  //    이걸 문장으로 넘기면 A–B가 10ms가 되어 루프가 폭주한다. 어차피 들을 수 없는 길이다.
   const sentences = useMemo(() => {
     const track = subs.find((s) => s.enabled) ?? subs[0];
-    return track ? track.cues.filter((c) => c.end > c.start) : [];
+    return track ? track.cues.filter((c) => c.end - c.start > MIN_LOOP_SEC) : [];
   }, [subs]);
 
+  // ⚠️ 문장 이동은 A–B를 그 문장 큐로 덮어쓰되 loopEnabled는 절대 건드리지 않는다.
+  //    `setLoopEnabled(true)`를 되살리지 말 것 — one-shot(루프 OFF)으로 듣던 사용자가
+  //    문장만 넘기려다 무한 반복에 갇힌다(repeatTarget이 0이면 영원히).
+  //    ON이면 문장 반복, OFF면 Waveform의 one-shot 분기가 B에서 멈춰준다.
+  //    참고: 루프 ON에서 구간을 유지한 채 seek만 하는 "순수 이동"은 불가능하다 —
+  //    Waveform의 `t >= b` 판정에 걸려 즉시 A로 튕긴다.
   const goPrevSentence = () => {
     if (!sentences.length) return;
     const t = currentTime;
     const prev = [...sentences].reverse().find((p) => p.start < t - 0.05) ?? sentences[sentences.length - 1];
-    setLoopA(prev.start);
-    setLoopB(prev.end);
-    setLoopEnabled(true);
+    setLoopRange(prev.start, prev.end);
     resetRepeatCount();
     setTime(prev.start);
   };
@@ -396,9 +404,7 @@ export default function Player() {
     if (!sentences.length) return;
     const t = currentTime;
     const next = sentences.find((p) => p.start > t + 0.05) ?? sentences[0];
-    setLoopA(next.start);
-    setLoopB(next.end);
-    setLoopEnabled(true);
+    setLoopRange(next.start, next.end);
     resetRepeatCount();
     setTime(next.start);
   };
@@ -826,10 +832,10 @@ export default function Player() {
             {sentences.length > 0 ? (
               <div className={clusterBase}>
                 <Divider />
-                <button onClick={goPrevSentence} disabled={controlsDisabled} title="이전 문장으로 이동" className={btnBase}>
+                <button onClick={goPrevSentence} disabled={controlsDisabled} title="이전 문장으로 이동 (구간을 그 문장으로 설정)" className={btnBase}>
                   <ChevronLeft className="h-4 w-4" /> 이전 문장
                 </button>
-                <button onClick={goNextSentence} disabled={controlsDisabled} title="다음 문장으로 이동" className={btnBase}>
+                <button onClick={goNextSentence} disabled={controlsDisabled} title="다음 문장으로 이동 (구간을 그 문장으로 설정)" className={btnBase}>
                   다음 문장 <ChevronRight className="h-4 w-4" />
                 </button>
               </div>

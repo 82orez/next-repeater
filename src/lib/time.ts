@@ -1,4 +1,12 @@
 // src/lib/time.ts
+
+// ✅ A–B 구간으로 인정하는 최소 길이(초).
+//    ⚠️ Player의 `canLoop`(UI 활성 판정)과 Waveform의 루프 실행 판정이 **반드시 같은 값**을 써야 한다.
+//    어긋나면(예: UI는 0.05, 엔진은 `b > a`) 0 < 길이 ≤ 0.05인 구간에서
+//    "반복 토글은 비활성인데 루프는 도는" 탈출 불가 상태가 된다.
+//    실제로 유튜브 자동생성 자막의 10ms roll-up 큐가 이 상태를 만들었다.
+export const MIN_LOOP_SEC = 0.05;
+
 export function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
