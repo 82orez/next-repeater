@@ -20,6 +20,23 @@ function CueLine({ track }: { track: SubTrack }) {
   );
 }
 
+// ✅ 트랙 태그 = 토글 버튼. 켜진 트랙은 자기 칸 위에, 꺼진 트랙은 윗줄에 렌더되므로
+//    두 자리에서 같은 마크업을 쓴다.
+function TrackChip({ track, onToggle }: { track: SubTrack; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      title={track.fileName}
+      className={clsx(
+        "rounded-lg border px-2 py-0.5 text-xs font-medium",
+        track.enabled ? "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50",
+      )}>
+      {track.label}
+      <span className="ml-1 font-normal opacity-60">{track.cues.length}</span>
+    </button>
+  );
+}
+
 export default function CaptionPanel() {
   const subs = usePlayerStore((s) => s.subs);
   const toggleSub = usePlayerStore((s) => s.toggleSub);
@@ -29,23 +46,15 @@ export default function CaptionPanel() {
   if (subs.length === 0) return null;
 
   const active = subs.filter((s) => s.enabled);
+  // 켜진 트랙의 태그는 각자의 칸으로 내려가므로, 윗줄에는 꺼진 트랙만 남긴다.
+  // (칸이 없는 트랙을 다시 켤 유일한 통로라 반드시 어딘가엔 있어야 한다.)
+  const inactive = subs.filter((s) => !s.enabled);
 
   return (
     <div className="my-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">자막</span>
-        {subs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => toggleSub(t.id)}
-            title={t.fileName}
-            className={clsx(
-              "rounded-lg border px-2 py-0.5 text-xs font-medium",
-              t.enabled ? "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50",
-            )}>
-            {t.label}
-            <span className="ml-1 font-normal opacity-60">{t.cues.length}</span>
-          </button>
+        {inactive.map((t) => (
+          <TrackChip key={t.id} track={t} onToggle={() => toggleSub(t.id)} />
         ))}
         <button
           onClick={clearSubs}
@@ -67,6 +76,10 @@ export default function CaptionPanel() {
         <div className="grid gap-1 sm:auto-cols-fr sm:grid-flow-col sm:gap-4">
           {active.map((t, i) => (
             <div key={t.id} className={clsx("min-w-0", i > 0 && "sm:border-l sm:border-zinc-100 sm:pl-4")}>
+              {/* 태그를 열 머리글로 — 높이가 칸마다 같아서 대사 첫 줄이 자동으로 가로 정렬된다 */}
+              <div className="mb-1.5">
+                <TrackChip track={t} onToggle={() => toggleSub(t.id)} />
+              </div>
               <CueLine track={t} />
             </div>
           ))}
