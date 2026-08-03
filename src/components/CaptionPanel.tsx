@@ -10,13 +10,11 @@ import { findCueText, type SubTrack } from "@/lib/subtitles";
 // ✅ 트랙 1개의 현재 대사만 담당하는 leaf.
 //    셀렉터가 "문자열"을 반환하므로 zustand가 Object.is로 비교 → 큐 경계를 넘을 때만 리렌더된다.
 //    (timeupdate는 rAF 주기로 초당 ~60회 들어오지만 여기서 걸러진다. TimeReadout과 같은 전략.)
-function CueLine({ track, dim }: { track: SubTrack; dim: boolean }) {
+function CueLine({ track }: { track: SubTrack }) {
   const text = usePlayerStore((s) => findCueText(track.cues, s.currentTime));
 
   return (
-    <p
-      lang={track.lang}
-      className={clsx("min-h-[1.5rem] leading-relaxed whitespace-pre-line", dim ? "text-sm text-zinc-500" : "text-base font-medium text-zinc-900")}>
+    <p lang={track.lang} className="min-h-[1.5rem] text-base leading-relaxed font-medium whitespace-pre-line text-zinc-900">
       {text || <span className="text-zinc-300">·</span>}
     </p>
   );
@@ -61,10 +59,16 @@ export default function CaptionPanel() {
       {active.length === 0 ? (
         <p className="text-sm text-zinc-400">표시할 자막을 선택하세요.</p>
       ) : (
-        <div className="space-y-1">
-          {/* 첫 트랙을 크게, 나머지는 보조로 — 로드 순서가 곧 표시 순서 */}
+        // 켜진 트랙을 좌우로 균등 분할(로드 순서가 곧 좌→우 순서).
+        // ⚠️ flex-1(= basis:0)이 아니라 grid 트랙(auto-cols-fr = minmax(0,1fr))을 쓴다 —
+        //    flex 는 border-box 기준이라 구분선 쪽 pl-4 가 그 칸의 폭에 얹혀 첫 칸만 17px 좁아진다.
+        //    1fr 트랙은 패딩과 무관하게 정확히 균등하고, 개수가 몇이든 자동으로 늘어난다.
+        //    좁은 화면에선 grid-flow-row(기본)로 남아 기존 세로 배치가 유지된다.
+        <div className="grid gap-1 sm:auto-cols-fr sm:grid-flow-col sm:gap-4">
           {active.map((t, i) => (
-            <CueLine key={t.id} track={t} dim={i > 0} />
+            <div key={t.id} className={clsx("min-w-0", i > 0 && "sm:border-l sm:border-zinc-100 sm:pl-4")}>
+              <CueLine track={t} />
+            </div>
           ))}
         </div>
       )}
