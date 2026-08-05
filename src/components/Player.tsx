@@ -984,12 +984,6 @@ export default function Player() {
             </div>
           </div>
 
-          {/* 내 발음 녹음 (분리 배치) */}
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-3 border-t border-zinc-100 pt-3">
-            <div className="text-sm font-medium text-zinc-600">내 발음 녹음</div>
-            <Recorder />
-          </div>
-
           {/* 상태 텍스트 */}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
             <span className="min-w-0 truncate">
@@ -1001,6 +995,12 @@ export default function Player() {
 
         {/* ✅ 자막 만들기 — A–B 구간 버튼 바로 아래(구간 지정 → 입력 순서대로 읽힌다). 미디어가 없으면 스스로 렌더하지 않음 */}
         <CaptionEditor />
+
+        {/* 내 발음 녹음 — 자막 만들기 아래(분리 배치) */}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="text-sm font-medium text-zinc-600">내 발음 녹음</div>
+          <Recorder />
+        </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {/* Repeat Limit */}
