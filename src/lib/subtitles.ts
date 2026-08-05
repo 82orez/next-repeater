@@ -5,7 +5,9 @@ import { pad2 } from "@/lib/time";
 // ⚠️ .srt는 MIME이 비어 있거나 text/plain으로 오므로 분류는 반드시 확장자 기준(file.type 신뢰 금지)
 export const SUB_EXT_RE = /\.(srt|vtt)$/i;
 
-export type Cue = { start: number; end: number; text: string };
+// id는 편집(CaptionEditor)에서만 쓴다 — 정렬로 인덱스가 바뀌어도 같은 큐를 가리키기 위한 키.
+// 파일에서 읽은 큐에는 없고 직렬화(formatSrt/formatVtt)에도 나가지 않는다.
+export type Cue = { id?: string; start: number; end: number; text: string };
 
 export type SubTrack = {
   id: string;
@@ -14,6 +16,7 @@ export type SubTrack = {
   fileName: string;
   cues: Cue[];
   enabled: boolean;
+  editable?: boolean; // 사용자가 직접 만든/편집 중인 트랙(스토어에 항상 최대 1개)
 };
 
 // 방향 제어문자(LRE/RLE/PDF/LRM/RLM/isolates) — 넷플릭스 자막이 큐마다 U+202A를 붙여둔다.
@@ -108,11 +111,12 @@ export function formatVtt(cues: Cue[]): string {
 }
 
 /**
- * 시각 t에 해당하는 큐 텍스트(없으면 "").
+ * 시각 t에 해당하는 큐의 인덱스(없으면 -1).
  * ⚠️ 반드시 순수 이진 탐색이어야 한다 — A–B 루프 재시작(Waveform의 play(a))은 시간을
  *    뒤로 점프시키므로, 포인터를 전진시키는 방식은 되감김마다 desync 된다.
+ *    (이진 탐색이라 큐가 시간순 정렬돼 있어야 한다 → 편집 후에는 반드시 sortCues.)
  */
-export function findCueText(cues: Cue[], t: number): string {
+export function findCueIndex(cues: Cue[], t: number): number {
   let lo = 0;
   let hi = cues.length - 1;
   while (lo <= hi) {
@@ -120,9 +124,37 @@ export function findCueText(cues: Cue[], t: number): string {
     const c = cues[mid];
     if (t < c.start) hi = mid - 1;
     else if (t >= c.end) lo = mid + 1;
-    else return c.text;
+    else return mid;
   }
-  return "";
+  return -1;
+}
+
+/** 시각 t에 해당하는 큐 텍스트(없으면 "") */
+export function findCueText(cues: Cue[], t: number): string {
+  const i = findCueIndex(cues, t);
+  return i < 0 ? "" : cues[i].text;
+}
+
+/**
+ * 시작 시각 오름차순 정렬본(원본 불변).
+ * ⚠️ findCueIndex(이진 탐색)와 Player의 sentences가 이 정렬을 전제한다 —
+ *    큐를 추가하거나 시간을 고친 뒤에는 반드시 통과시킬 것.
+ */
+export function sortCues(cues: Cue[]): Cue[] {
+  return [...cues].sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+/**
+ * [start,end)와 겹치는 첫 큐(없으면 null). ignoreId는 자기 자신 제외용.
+ * ⚠️ 겹침을 허용하면 findCueIndex(이진 탐색)가 둘 중 하나만 집어서
+ *    나머지 큐가 화면에 영영 안 나온다 → 편집 단계에서 미리 막는다.
+ */
+export function findOverlapping(cues: Cue[], start: number, end: number, ignoreId?: string): Cue | null {
+  for (const c of cues) {
+    if (ignoreId != null && c.id === ignoreId) continue;
+    if (start < c.end && end > c.start) return c;
+  }
+  return null;
 }
 
 // 파일명 언어 코드 → [표시 라벨, BCP-47]

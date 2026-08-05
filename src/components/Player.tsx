@@ -28,6 +28,7 @@ import Waveform from "@/components/Waveform";
 import MediaView from "@/components/MediaView";
 import Recorder from "@/components/Recorder";
 import CaptionPanel from "@/components/CaptionPanel";
+import CaptionEditor from "@/components/CaptionEditor";
 import PlaylistDialog from "@/components/PlaylistDialog";
 import { usePlayerStore } from "@/store/playerStore";
 import { fmtTime, clamp, MIN_LOOP_SEC } from "@/lib/time";
@@ -35,6 +36,7 @@ import { isModalOpen } from "@/lib/dom";
 import { extractRegionToMp3 } from "@/lib/audioExport";
 import { transcodeVideo, type TranscodeOptions } from "@/lib/videoTranscode";
 import { parseSubtitles, labelFromFileName, SUB_EXT_RE, type SubTrack } from "@/lib/subtitles";
+import { loadDraft } from "@/lib/subtitleDraft";
 import { uid } from "@/lib/id";
 
 // 이 크기 초과 시 브라우저 변환(ffmpeg.wasm)은 메모리 한계로 불가 → 로컬 명령어로 유도
@@ -221,6 +223,13 @@ export default function Player() {
       // 자막을 읽는 동안 다른 트랙이 선택됐다면 그 트랙 자막을 덮어쓰면 안 된다
       if (isStale()) return false;
       if (tracks.length > 0) addSubs(tracks);
+
+      // ✅ 직접 만들던 자막 복원(같은 파일명일 때만). setSource가 subs를 비우므로 여기서만 붙일 수 있다.
+      const draft = loadDraft(file.name);
+      if (draft) {
+        addSubs([draft]);
+        toast.success(`직접 만든 자막 ${draft.cues.length}줄을 복원했습니다.`);
+      }
       return true;
     };
 
@@ -989,6 +998,9 @@ export default function Player() {
             <span className="rounded-full bg-zinc-100 px-2 py-1 text-zinc-600">반복: {repeatCount}</span>
           </div>
         </div>
+
+        {/* ✅ 자막 만들기 — A–B 구간 버튼 바로 아래(구간 지정 → 입력 순서대로 읽힌다). 미디어가 없으면 스스로 렌더하지 않음 */}
+        <CaptionEditor />
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {/* Repeat Limit */}

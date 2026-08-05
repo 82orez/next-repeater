@@ -4,7 +4,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type WaveSurfer from "wavesurfer.js";
-import type { SubTrack } from "@/lib/subtitles";
+import { sortCues, type Cue, type SubTrack } from "@/lib/subtitles";
+import { uid } from "@/lib/id";
 
 export type MediaKind = "audio" | "video";
 
@@ -60,6 +61,11 @@ type PlayerState = {
   addSubs: (tracks: SubTrack[]) => void;
   toggleSub: (id: string) => void;
   clearSubs: () => void;
+
+  // ✅ 자막 직접 만들기/편집(CaptionEditor) — 편집 트랙은 항상 최대 1개
+  createEditTrack: (label: string, fileName: string, cues?: Cue[]) => string;
+  setTrackCues: (id: string, cues: Cue[]) => void;
+  removeTrack: (id: string) => void;
 
   playlist: PlaylistItem[];
   playlistIndex: number;
@@ -146,6 +152,26 @@ export const usePlayerStore = create<PlayerState>()(
       addSubs: (tracks) => set({ subs: [...get().subs.filter((s) => !tracks.some((t) => t.fileName === s.fileName)), ...tracks] }),
       toggleSub: (id) => set({ subs: get().subs.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)) }),
       clearSubs: () => set({ subs: [] }),
+
+      // 큐마다 id를 붙여 둔다 — 정렬로 인덱스가 밀려도 편집 대상이 바뀌지 않게 하기 위함.
+      // 편집 트랙은 1개만 유지한다(호출부에서 교체 전 확인 모달을 띄운다).
+      createEditTrack: (label, fileName, cues = []) => {
+        const id = uid();
+        const track: SubTrack = {
+          id,
+          label,
+          fileName,
+          enabled: true,
+          editable: true,
+          cues: sortCues(cues.map((c) => ({ ...c, id: c.id ?? uid() }))),
+        };
+        set({ subs: [...get().subs.filter((s) => !s.editable), track] });
+        return id;
+      },
+
+      // ⚠️ 정렬은 여기서 한 번만 보장한다 — findCueIndex(이진 탐색)와 Player의 sentences가 정렬을 전제한다
+      setTrackCues: (id, cues) => set({ subs: get().subs.map((s) => (s.id === id ? { ...s, cues: sortCues(cues) } : s)) }),
+      removeTrack: (id) => set({ subs: get().subs.filter((s) => s.id !== id) }),
 
       playlist: [],
       playlistIndex: -1,
